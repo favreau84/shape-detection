@@ -6,20 +6,27 @@ import { useViewport } from '../hooks/useViewport';
 import { screenToImage, imageToScreen, distance, computePolygonArea, computePxPerCm, formatAreaCm2, formatAreaPx, CREDIT_CARD_DIAGONAL_CM } from '../utils/geometry';
 import { ScaleModal } from './ScaleModal';
 
+interface CardDetection {
+  p1: Point;
+  p2: Point;
+  diagCm: number;
+}
+
 interface Props {
   imageSrc: string;
   imageSize: { width: number; height: number };
   detectedPolygon: Point[] | null;
+  detectedCard: CardDetection | null;
   detecting: boolean;
   detectionStatus: string;
-  onRequestDetection: () => void;
+  onRequestDetection: (mode: DrawTool) => void;
   onDone: (points: Point[], area: number, scale: ScaleRef | null) => void;
   onBack: () => void;
 }
 
 const CLOSE_THRESHOLD_PX = 30;
 
-export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting, detectionStatus, onRequestDetection, onDone, onBack }: Props) {
+export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCard, detecting, detectionStatus, onRequestDetection, onDone, onBack }: Props) {
   const [shapePoints, setShapePoints] = useState<Point[]>([]);
   const [closed, setClosed] = useState(false);
   const [mode, setMode] = useState<EditorMode>('draw');
@@ -40,13 +47,28 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
     }
   }, [imageSize, viewport]);
 
-  // Apply detected polygon
+  // Apply detected polygon (shape mode)
   useEffect(() => {
-    if (detectedPolygon && detectedPolygon.length >= 3 && shapePoints.length === 0) {
+    if (detectedPolygon && detectedPolygon.length >= 3) {
       setShapePoints(detectedPolygon);
       setClosed(true);
+      setTool('shape');
     }
-  }, [detectedPolygon, shapePoints.length]);
+  }, [detectedPolygon]);
+
+  // Apply detected card (scale mode) → auto-set scale
+  useEffect(() => {
+    if (detectedCard) {
+      setScalePoints([detectedCard.p1, detectedCard.p2]);
+      setScaleRef({
+        p1: detectedCard.p1,
+        p2: detectedCard.p2,
+        valueCm: detectedCard.diagCm,
+      });
+      // Auto-switch to shape tool after card detection
+      setTool('shape');
+    }
+  }, [detectedCard]);
 
   const points = tool === 'shape' ? shapePoints : scalePoints;
 
@@ -88,12 +110,10 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
       }
       setShapePoints(prev => [...prev, imgPt]);
     } else {
-      // Scale tool: max 2 points
       if (scalePoints.length >= 2) return;
       const newPoints = [...scalePoints, imgPt];
       setScalePoints(newPoints);
       if (newPoints.length === 2) {
-        // Show modal to ask for distance
         setShowScaleModal(true);
       }
     }
@@ -154,6 +174,10 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
     setScalePoints([]);
   }, []);
 
+  const handleMagicWand = useCallback(() => {
+    onRequestDetection(tool);
+  }, [onRequestDetection, tool]);
+
   // Edit mode: drag handling
   const handleEditPointerDown = useCallback((e: React.PointerEvent) => {
     if (mode !== 'edit') return;
@@ -204,7 +228,6 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
     dragStartPos.current = null;
   }, []);
 
-  // Compute crosshair position in image coords for the dashed line
   const getCrosshairImagePos = useCallback((): Point | null => {
     const container = viewport.containerRef.current;
     if (!container) return null;
@@ -223,7 +246,6 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
     ? (pxPerCm ? formatAreaCm2(area, pxPerCm) : formatAreaPx(area))
     : '';
 
-  // Button label in draw mode
   const getAddButtonLabel = () => {
     if (tool === 'scale') {
       if (scalePoints.length >= 2) return 'Échelle définie';
@@ -316,9 +338,9 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
             {/* Magic wand button */}
             <button
               className={`btn-magic ${detecting ? 'btn-magic-active' : ''}`}
-              onClick={onRequestDetection}
+              onClick={handleMagicWand}
               disabled={detecting}
-              title="Détection automatique"
+              title={tool === 'scale' ? 'Détecter une carte' : 'Détecter la forme'}
             >
               {detecting ? (
                 <div className="spinner spinner-sm" />
@@ -340,7 +362,7 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
           </div>
         )}
 
-        {/* Crosshair - visible in draw mode when not closed (shape) or scale not done */}
+        {/* Crosshair */}
         {mode === 'draw' && !(tool === 'shape' && closed) && !(tool === 'scale' && scalePoints.length >= 2) && (
           <div className={`crosshair ${closable ? 'crosshair-closable' : ''}`}>
             <svg width="40" height="40" viewBox="0 0 40 40">

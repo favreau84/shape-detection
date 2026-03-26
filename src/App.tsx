@@ -1,9 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { AppPhase, Point, ScaleRef } from './types';
+import type { AppPhase, Point, ScaleRef, DrawTool } from './types';
 import { CameraCapture } from './components/CameraCapture';
 import { PolygonEditor } from './components/PolygonEditor';
 import { ResultView } from './components/ResultView';
 import './App.css';
+
+interface CardDetection {
+  p1: Point;
+  p2: Point;
+  diagCm: number;
+}
 
 export default function App() {
   const [phase, setPhase] = useState<AppPhase>('capture');
@@ -13,8 +19,9 @@ export default function App() {
   const [resultArea, setResultArea] = useState(0);
   const [scaleRef, setScaleRef] = useState<ScaleRef | null>(null);
   const [detectedPolygon, setDetectedPolygon] = useState<Point[] | null>(null);
+  const [detectedCard, setDetectedCard] = useState<CardDetection | null>(null);
   const [detecting, setDetecting] = useState(false);
-  const [detectionStatus, setDetectionStatus] = useState('Détection en cours...');
+  const [detectionStatus, setDetectionStatus] = useState('');
 
   const workerRef = useRef<Worker | null>(null);
   const imageSrcRef = useRef<string>('');
@@ -25,7 +32,7 @@ export default function App() {
     };
   }, []);
 
-  const startSegmentation = useCallback(() => {
+  const startSegmentation = useCallback((mode: DrawTool) => {
     if (!imageSrcRef.current || detecting) return;
 
     const img = new Image();
@@ -37,7 +44,6 @@ export default function App() {
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Terminate any existing worker
       workerRef.current?.terminate();
 
       const worker = new Worker(
@@ -47,14 +53,17 @@ export default function App() {
       workerRef.current = worker;
 
       worker.onmessage = (e) => {
-        const { type, polygon, message } = e.data;
-        if (type === 'status') {
-          setDetectionStatus(message);
-        } else if (type === 'result') {
-          setDetectedPolygon(polygon);
+        const data = e.data;
+        if (data.type === 'status') {
+          setDetectionStatus(data.message);
+        } else if (data.type === 'shape-result') {
+          setDetectedPolygon(data.polygon);
           setDetecting(false);
-        } else if (type === 'error') {
-          console.warn('Segmentation error:', message);
+        } else if (data.type === 'card-result') {
+          setDetectedCard({ p1: data.p1, p2: data.p2, diagCm: data.diagCm });
+          setDetecting(false);
+        } else if (data.type === 'error') {
+          console.warn('Segmentation error:', data.message);
           setDetecting(false);
           setDetectionStatus('Détection échouée');
         }
@@ -66,10 +75,11 @@ export default function App() {
       };
 
       setDetecting(true);
-      setDetectionStatus('Détection en cours...');
+      setDetectionStatus(mode === 'scale' ? 'Détection de la carte...' : 'Détection de la forme...');
 
       worker.postMessage({
         type: 'segment',
+        mode,
         imageData: imageData.data.buffer,
         width: canvas.width,
         height: canvas.height,
@@ -82,6 +92,7 @@ export default function App() {
     setImageSrc(dataUrl);
     imageSrcRef.current = dataUrl;
     setDetectedPolygon(null);
+    setDetectedCard(null);
     setDetecting(false);
     setScaleRef(null);
     setPhase('draw');
@@ -109,6 +120,7 @@ export default function App() {
     setResultPoints([]);
     setResultArea(0);
     setDetectedPolygon(null);
+    setDetectedCard(null);
     setDetecting(false);
     setScaleRef(null);
   }, []);
@@ -118,6 +130,7 @@ export default function App() {
     workerRef.current = null;
     setPhase('capture');
     setDetectedPolygon(null);
+    setDetectedCard(null);
     setDetecting(false);
   }, []);
 
@@ -129,6 +142,7 @@ export default function App() {
           imageSrc={imageSrc}
           imageSize={imageSize}
           detectedPolygon={detectedPolygon}
+          detectedCard={detectedCard}
           detecting={detecting}
           detectionStatus={detectionStatus}
           onRequestDetection={startSegmentation}
