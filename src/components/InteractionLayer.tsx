@@ -31,15 +31,15 @@ export function InteractionLayer({
 }: Props) {
   const { offsetX, offsetY, scale } = viewportState;
 
-  // Show scale line only when in scale tool mode
-  const showScaleLine = activeTool === 'scale';
-  const scaleLine = showScaleLine
-    ? (scaleRef
-        ? { p1: scaleRef.p1, p2: scaleRef.p2 }
-        : scalePoints.length === 2
-          ? { p1: scalePoints[0], p2: scalePoints[1] }
-          : null)
-    : null;
+  // Show scale line: always when scaleRef is set, or in-progress when in scale tool
+  const scaleLine = scaleRef
+    ? { p1: scaleRef.p1, p2: scaleRef.p2 }
+    : (activeTool === 'scale' && scalePoints.length === 2)
+      ? { p1: scalePoints[0], p2: scalePoints[1] }
+      : null;
+
+  // Show scale points as draggable when in scale tool with scale set
+  const scaleDraggable = activeTool === 'scale' && !!scaleRef;
 
   // Determine the last active point + whether to show dashed leader line
   const activePoints = activeTool === 'shape' ? shapePoints : scalePoints;
@@ -78,8 +78,8 @@ export function InteractionLayer({
               strokeDasharray={`${6 / scale} ${4 / scale}`}
               strokeLinecap="round"
             />
-            <circle cx={scaleLine.p1.x} cy={scaleLine.p1.y} r={5 / scale} fill="#2196F3" stroke="white" strokeWidth={1.5 / scale} />
-            <circle cx={scaleLine.p2.x} cy={scaleLine.p2.y} r={5 / scale} fill="#2196F3" stroke="white" strokeWidth={1.5 / scale} />
+            <circle cx={scaleLine.p1.x} cy={scaleLine.p1.y} r={(scaleDraggable ? 12 : 5) / scale} fill="#2196F3" stroke="white" strokeWidth={1.5 / scale} />
+            <circle cx={scaleLine.p2.x} cy={scaleLine.p2.y} r={(scaleDraggable ? 12 : 5) / scale} fill="#2196F3" stroke="white" strokeWidth={1.5 / scale} />
           </>
         )}
 

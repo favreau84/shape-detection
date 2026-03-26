@@ -6,9 +6,10 @@ import { ResultView } from './components/ResultView';
 import { detectRuler, detectBlackContour } from './utils/detection';
 import './App.css';
 
-interface CardDetection {
+interface RulerResult {
   p1: Point;
   p2: Point;
+  distanceCm: number;
 }
 
 export default function App() {
@@ -19,7 +20,7 @@ export default function App() {
   const [resultArea, setResultArea] = useState(0);
   const [scaleRef, setScaleRef] = useState<ScaleRef | null>(null);
   const [detectedPolygon, setDetectedPolygon] = useState<Point[] | null>(null);
-  const [detectedCard, setDetectedCard] = useState<CardDetection | null>(null);
+  const [detectedRuler, setDetectedRuler] = useState<RulerResult | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState('');
   const [detectionError, setDetectionError] = useState<string | null>(null);
@@ -38,7 +39,7 @@ export default function App() {
       if (mode === 'scale') {
         const ruler = await detectRuler(imageSrc);
         if (ruler) {
-          setDetectedCard({ p1: ruler.p1, p2: ruler.p2 });
+          setDetectedRuler(ruler);
         } else {
           setDetectionError('Aucun mètre détecté');
         }
@@ -61,7 +62,7 @@ export default function App() {
   const handleCapture = useCallback((dataUrl: string) => {
     setImageSrc(dataUrl);
     setDetectedPolygon(null);
-    setDetectedCard(null);
+    setDetectedRuler(null);
     setDetecting(false);
     setScaleRef(null);
     setPhase('draw');
@@ -86,7 +87,7 @@ export default function App() {
     setResultPoints([]);
     setResultArea(0);
     setDetectedPolygon(null);
-    setDetectedCard(null);
+    setDetectedRuler(null);
     setDetecting(false);
     setScaleRef(null);
   }, []);
@@ -94,7 +95,7 @@ export default function App() {
   const handleBack = useCallback(() => {
     setPhase('capture');
     setDetectedPolygon(null);
-    setDetectedCard(null);
+    setDetectedRuler(null);
     setDetecting(false);
   }, []);
 
@@ -106,7 +107,7 @@ export default function App() {
           imageSrc={imageSrc}
           imageSize={imageSize}
           detectedPolygon={detectedPolygon}
-          detectedCard={detectedCard}
+          detectedRuler={detectedRuler}
           detecting={detecting}
           detectionStatus={detectionStatus}
           detectionError={detectionError}

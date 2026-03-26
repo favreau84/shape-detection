@@ -6,16 +6,17 @@ import { useViewport } from '../hooks/useViewport';
 import { screenToImage, imageToScreen, distance, computePolygonArea, computePxPerCm, formatAreaCm2, formatAreaPx } from '../utils/geometry';
 import { ScaleModal } from './ScaleModal';
 
-interface CardDetection {
+interface RulerResult {
   p1: Point;
   p2: Point;
+  distanceCm: number;
 }
 
 interface Props {
   imageSrc: string;
   imageSize: { width: number; height: number };
   detectedPolygon: Point[] | null;
-  detectedCard: CardDetection | null;
+  detectedRuler: RulerResult | null;
   detecting: boolean;
   detectionStatus: string;
   detectionError: string | null;
@@ -27,7 +28,7 @@ interface Props {
 
 const CLOSE_THRESHOLD_PX = 30;
 
-export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCard, detecting, detectionStatus, detectionError, onClearError, onRequestDetection, onDone, onBack }: Props) {
+export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRuler, detecting, detectionStatus, detectionError, onClearError, onRequestDetection, onDone, onBack }: Props) {
   const [shapePoints, setShapePoints] = useState<Point[]>([]);
   const [closed, setClosed] = useState(false);
   const [mode, setMode] = useState<EditorMode>('draw');
@@ -59,13 +60,24 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCa
     }
   }, [detectedPolygon]);
 
-  // Apply detected ruler (scale mode) → show scale points + open modal
+  // Apply detected ruler
   useEffect(() => {
-    if (detectedCard) {
-      setScalePoints([detectedCard.p1, detectedCard.p2]);
-      setShowScaleModal(true);
+    if (detectedRuler) {
+      setScalePoints([detectedRuler.p1, detectedRuler.p2]);
+      if (detectedRuler.distanceCm > 0) {
+        // Auto-calibrated: set scale directly, no modal
+        setScaleRef({
+          p1: detectedRuler.p1,
+          p2: detectedRuler.p2,
+          valueCm: detectedRuler.distanceCm,
+        });
+        setTool('shape');
+      } else {
+        // Fallback: ruler found but no tick marks → ask user
+        setShowScaleModal(true);
+      }
     }
-  }, [detectedCard]);
+  }, [detectedRuler]);
 
   // Show toast on detection error
   useEffect(() => {
@@ -241,6 +253,57 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCa
     dragStartPos.current = null;
   }, []);
 
+  // Scale endpoint drag handling
+  const [scaleDragIdx, setScaleDragIdx] = useState<number | null>(null);
+
+  const handleScalePointerDown = useCallback((e: React.PointerEvent) => {
+    if (tool !== 'scale' || !scaleRef) return;
+    const container = viewport.containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    const pts = [scaleRef.p1, scaleRef.p2];
+    for (let i = 0; i < 2; i++) {
+      const sp = imageToScreen(
+        pts[i].x, pts[i].y,
+        viewport.state.offsetX, viewport.state.offsetY, viewport.state.scale
+      );
+      if (distance({ x: sx, y: sy }, sp) < 35) {
+        setScaleDragIdx(i);
+        viewport.setLocked(true);
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        e.stopPropagation();
+        return;
+      }
+    }
+  }, [tool, scaleRef, viewport]);
+
+  const handleScalePointerMove = useCallback((e: React.PointerEvent) => {
+    if (scaleDragIdx === null || !scaleRef) return;
+    const container = viewport.containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const imgPt = screenToImage(
+      sx, sy,
+      viewport.state.offsetX, viewport.state.offsetY, viewport.state.scale
+    );
+    const newP1 = scaleDragIdx === 0 ? imgPt : scaleRef.p1;
+    const newP2 = scaleDragIdx === 1 ? imgPt : scaleRef.p2;
+    setScaleRef({ p1: newP1, p2: newP2, valueCm: scaleRef.valueCm });
+    setScalePoints([newP1, newP2]);
+  }, [scaleDragIdx, scaleRef, viewport]);
+
+  const handleScalePointerUp = useCallback(() => {
+    if (scaleDragIdx !== null) {
+      setScaleDragIdx(null);
+      viewport.setLocked(false);
+    }
+  }, [scaleDragIdx, viewport]);
+
   const getCrosshairImagePos = useCallback((): Point | null => {
     const container = viewport.containerRef.current;
     if (!container) return null;
@@ -298,9 +361,18 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCa
       {/* Viewport */}
       <div
         className="editor-viewport"
-        onPointerDown={mode === 'edit' ? handleEditPointerDown : undefined}
-        onPointerMove={mode === 'edit' ? handleEditPointerMove : undefined}
-        onPointerUp={mode === 'edit' ? handleEditPointerUp : undefined}
+        onPointerDown={(e) => {
+          if (mode === 'edit') handleEditPointerDown(e);
+          else if (tool === 'scale' && scaleRef) handleScalePointerDown(e);
+        }}
+        onPointerMove={(e) => {
+          if (mode === 'edit') handleEditPointerMove(e);
+          else if (scaleDragIdx !== null) handleScalePointerMove(e);
+        }}
+        onPointerUp={() => {
+          if (mode === 'edit') handleEditPointerUp();
+          else handleScalePointerUp();
+        }}
       >
         <MapViewport viewport={viewport}>
           <InteractionLayer

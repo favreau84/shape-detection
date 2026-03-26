@@ -5,7 +5,8 @@ interface Props {
 }
 
 export function CameraCapture({ onCapture }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -32,18 +33,35 @@ export function CameraCapture({ onCapture }: Props) {
         </div>
         <h1>Mesure de Cloque</h1>
         <p className="capture-subtitle">Prenez une photo pour mesurer la surface</p>
-        <button className="btn btn-primary" onClick={() => inputRef.current?.click()}>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <rect x="2" y="5" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-            <circle cx="10" cy="11" r="3.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
-          </svg>
-          Prendre une photo
-        </button>
+        <div className="capture-buttons">
+          <button className="btn btn-primary" onClick={() => cameraRef.current?.click()}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <rect x="2" y="5" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+              <circle cx="10" cy="11" r="3.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            </svg>
+            Prendre une photo
+          </button>
+          <button className="btn btn-secondary" onClick={() => galleryRef.current?.click()}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+              <circle cx="7" cy="7" r="2" fill="currentColor" opacity="0.6" />
+              <path d="M2 14L6 10L10 14L14 8L18 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Choisir une image
+          </button>
+        </div>
         <input
-          ref={inputRef}
+          ref={cameraRef}
           type="file"
           accept="image/*"
           capture="environment"
+          onChange={handleChange}
+          style={{ display: 'none' }}
+        />
+        <input
+          ref={galleryRef}
+          type="file"
+          accept="image/*"
           onChange={handleChange}
           style={{ display: 'none' }}
         />
