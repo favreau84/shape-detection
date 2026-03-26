@@ -1,15 +1,15 @@
-import { env, AutoModel, AutoProcessor, RawImage, Tensor } from '@xenova/transformers';
+import { env, SamModel, AutoProcessor, RawImage } from '@xenova/transformers';
 
 env.allowLocalModels = false;
 
-let model: Awaited<ReturnType<typeof AutoModel.from_pretrained>> | null = null;
+let model: Awaited<ReturnType<typeof SamModel.from_pretrained>> | null = null;
 let processor: Awaited<ReturnType<typeof AutoProcessor.from_pretrained>> | null = null;
 
 async function loadModel() {
   if (!model) {
     self.postMessage({ type: 'status', message: 'Chargement du modèle...' });
     processor = await AutoProcessor.from_pretrained('Xenova/slimsam-77-uniform');
-    model = await AutoModel.from_pretrained('Xenova/slimsam-77-uniform');
+    model = await SamModel.from_pretrained('Xenova/slimsam-77-uniform');
     self.postMessage({ type: 'status', message: 'Modèle chargé' });
   }
 }
@@ -133,14 +133,10 @@ async function runSegmentation(imageData: ArrayBuffer, origWidth: number, origHe
 
   const inputs = await processor!(image);
 
-  // Build input_points and input_labels as proper Tensors
-  const inputPointsData = new Float32Array([w / 2, h / 2]);
-  const inputLabelsData = new BigInt64Array([1n]);
-
   const processedInputs = {
     ...inputs,
-    input_points: new Tensor('float32', inputPointsData, [1, 1, 2]),
-    input_labels: new Tensor('int64', inputLabelsData, [1, 1]),
+    input_points: [[[w / 2, h / 2]]],
+    input_labels: [[1]],
   };
 
   const outputs = await model!(processedInputs);
