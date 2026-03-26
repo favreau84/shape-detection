@@ -1,14 +1,14 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import type { AppPhase, Point, ScaleRef, DrawTool } from './types';
 import { CameraCapture } from './components/CameraCapture';
 import { PolygonEditor } from './components/PolygonEditor';
 import { ResultView } from './components/ResultView';
+import { detectRuler, detectBlackContour } from './utils/detection';
 import './App.css';
 
 interface CardDetection {
   p1: Point;
   p2: Point;
-  diagCm: number;
 }
 
 export default function App() {
@@ -24,75 +24,42 @@ export default function App() {
   const [detectionStatus, setDetectionStatus] = useState('');
   const [detectionError, setDetectionError] = useState<string | null>(null);
 
-  const workerRef = useRef<Worker | null>(null);
-  const imageSrcRef = useRef<string>('');
+  const startDetection = useCallback(async (mode: DrawTool) => {
+    if (!imageSrc || detecting) return;
 
-  useEffect(() => {
-    return () => {
-      workerRef.current?.terminate();
-    };
-  }, []);
+    setDetecting(true);
+    setDetectionError(null);
+    setDetectionStatus(mode === 'scale' ? 'Détection du mètre...' : 'Détection du contour...');
 
-  const startSegmentation = useCallback((mode: DrawTool) => {
-    if (!imageSrcRef.current || detecting) return;
+    // Yield to UI to show spinner
+    await new Promise(r => setTimeout(r, 50));
 
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      workerRef.current?.terminate();
-
-      const worker = new Worker(
-        new URL('./workers/segmentation.worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-      workerRef.current = worker;
-
-      worker.onmessage = (e) => {
-        const data = e.data;
-        if (data.type === 'status') {
-          setDetectionStatus(data.message);
-        } else if (data.type === 'shape-result') {
-          setDetectedPolygon(data.polygon);
-          setDetecting(false);
-        } else if (data.type === 'card-result') {
-          setDetectedCard({ p1: data.p1, p2: data.p2, diagCm: data.diagCm });
-          setDetecting(false);
-        } else if (data.type === 'error') {
-          console.warn('Segmentation error:', data.message);
-          setDetecting(false);
-          setDetectionError(data.message || 'Détection échouée');
+    try {
+      if (mode === 'scale') {
+        const ruler = await detectRuler(imageSrc);
+        if (ruler) {
+          setDetectedCard({ p1: ruler.p1, p2: ruler.p2 });
+        } else {
+          setDetectionError('Aucun mètre détecté');
         }
-      };
-
-      worker.onerror = () => {
-        setDetecting(false);
-        setDetectionError('Détection échouée');
-      };
-
-      setDetecting(true);
-      setDetectionError(null);
-      setDetectionStatus(mode === 'scale' ? 'Détection de la carte...' : 'Détection de la forme...');
-
-      worker.postMessage({
-        type: 'segment',
-        mode,
-        imageData: imageData.data.buffer,
-        width: canvas.width,
-        height: canvas.height,
-      }, [imageData.data.buffer]);
-    };
-    img.src = imageSrcRef.current;
-  }, [detecting]);
+      } else {
+        const polygon = await detectBlackContour(imageSrc);
+        if (polygon && polygon.length >= 3) {
+          setDetectedPolygon(polygon);
+        } else {
+          setDetectionError('Aucun contour détecté');
+        }
+      }
+    } catch (error) {
+      console.warn('Detection error:', error);
+      setDetectionError(error instanceof Error ? error.message : 'Détection échouée');
+    } finally {
+      setDetecting(false);
+    }
+  }, [imageSrc, detecting]);
 
   const handleCapture = useCallback((dataUrl: string) => {
     setImageSrc(dataUrl);
-    imageSrcRef.current = dataUrl;
     setDetectedPolygon(null);
     setDetectedCard(null);
     setDetecting(false);
@@ -114,11 +81,8 @@ export default function App() {
   }, []);
 
   const handleRestart = useCallback(() => {
-    workerRef.current?.terminate();
-    workerRef.current = null;
     setPhase('capture');
     setImageSrc('');
-    imageSrcRef.current = '';
     setResultPoints([]);
     setResultArea(0);
     setDetectedPolygon(null);
@@ -128,8 +92,6 @@ export default function App() {
   }, []);
 
   const handleBack = useCallback(() => {
-    workerRef.current?.terminate();
-    workerRef.current = null;
     setPhase('capture');
     setDetectedPolygon(null);
     setDetectedCard(null);
@@ -149,7 +111,7 @@ export default function App() {
           detectionStatus={detectionStatus}
           detectionError={detectionError}
           onClearError={() => setDetectionError(null)}
-          onRequestDetection={startSegmentation}
+          onRequestDetection={startDetection}
           onDone={handleDone}
           onBack={handleBack}
         />

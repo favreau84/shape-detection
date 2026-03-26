@@ -3,13 +3,12 @@ import type { Point, EditorMode, DrawTool, ScaleRef } from '../types';
 import { MapViewport } from './MapViewport';
 import { InteractionLayer } from './InteractionLayer';
 import { useViewport } from '../hooks/useViewport';
-import { screenToImage, imageToScreen, distance, computePolygonArea, computePxPerCm, formatAreaCm2, formatAreaPx, CREDIT_CARD_DIAGONAL_CM } from '../utils/geometry';
+import { screenToImage, imageToScreen, distance, computePolygonArea, computePxPerCm, formatAreaCm2, formatAreaPx } from '../utils/geometry';
 import { ScaleModal } from './ScaleModal';
 
 interface CardDetection {
   p1: Point;
   p2: Point;
-  diagCm: number;
 }
 
 interface Props {
@@ -60,17 +59,11 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCa
     }
   }, [detectedPolygon]);
 
-  // Apply detected card (scale mode) → auto-set scale
+  // Apply detected ruler (scale mode) → show scale points + open modal
   useEffect(() => {
     if (detectedCard) {
       setScalePoints([detectedCard.p1, detectedCard.p2]);
-      setScaleRef({
-        p1: detectedCard.p1,
-        p2: detectedCard.p2,
-        valueCm: detectedCard.diagCm,
-      });
-      // Auto-switch to shape tool after card detection
-      setTool('shape');
+      setShowScaleModal(true);
     }
   }, [detectedCard]);
 
@@ -182,7 +175,8 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCa
 
   const handleUseCreditCard = useCallback(() => {
     if (scalePoints.length === 2) {
-      setScaleRef({ p1: scalePoints[0], p2: scalePoints[1], valueCm: CREDIT_CARD_DIAGONAL_CM });
+      // Credit card diagonal: sqrt(8.56² + 5.398²) ≈ 10.12 cm
+      setScaleRef({ p1: scalePoints[0], p2: scalePoints[1], valueCm: 10.12 });
     }
     setShowScaleModal(false);
     setTool('shape');

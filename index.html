@@ -12,6 +12,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      var cv = cv || {};
+      cv['onRuntimeInitialized'] = function() {
+        document.dispatchEvent(new Event('opencv-ready'));
+      };
+    </script>
+    <script async src="https://docs.opencv.org/4.10.0/opencv.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
