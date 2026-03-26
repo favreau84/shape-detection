@@ -603,6 +603,15 @@ body {
 
 .result-footer .btn { width: 100%; }
 
+.result-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.result-buttons .btn {
+  flex: 1;
+}
+
 /* ========================================
    Responsive - Desktop
    ======================================== */
