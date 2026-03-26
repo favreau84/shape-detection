@@ -13,6 +13,8 @@ interface Props {
   dragIndex: number | null;
   activeTool: DrawTool;
   crosshairImagePos: Point | null;
+  scaleDragIdx: number | null;
+  dragOffsetPx: number;
 }
 
 export function InteractionLayer({
@@ -28,20 +30,19 @@ export function InteractionLayer({
   dragIndex,
   activeTool,
   crosshairImagePos,
+  scaleDragIdx,
+  dragOffsetPx,
 }: Props) {
   const { offsetX, offsetY, scale } = viewportState;
 
-  // Show scale line: always when scaleRef is set, or in-progress when in scale tool
   const scaleLine = scaleRef
     ? { p1: scaleRef.p1, p2: scaleRef.p2 }
     : (activeTool === 'scale' && scalePoints.length === 2)
       ? { p1: scalePoints[0], p2: scalePoints[1] }
       : null;
 
-  // Show scale points as draggable when in scale tool with scale set
   const scaleDraggable = activeTool === 'scale' && !!scaleRef;
 
-  // Determine the last active point + whether to show dashed leader line
   const activePoints = activeTool === 'shape' ? shapePoints : scalePoints;
   const showLeader = !closed
     && crosshairImagePos
@@ -49,6 +50,9 @@ export function InteractionLayer({
     && !(activeTool === 'scale' && scalePoints.length >= 2);
   const lastPoint = activePoints.length > 0 ? activePoints[activePoints.length - 1] : null;
   const leaderColor = activeTool === 'scale' ? '#2196F3' : '#F57C00';
+
+  // Offset in image coords for the lifted drag indicator
+  const liftOffsetImg = dragOffsetPx / scale;
 
   return (
     <svg
@@ -65,7 +69,7 @@ export function InteractionLayer({
       <g transform={`translate(${offsetX}, ${offsetY}) scale(${scale})`}>
         <image href={imageSrc} width={imageWidth} height={imageHeight} />
 
-        {/* Scale reference line (only visible when scale tool active) */}
+        {/* Scale reference line */}
         {scaleLine && (
           <>
             <line
@@ -78,8 +82,46 @@ export function InteractionLayer({
               strokeDasharray={`${6 / scale} ${4 / scale}`}
               strokeLinecap="round"
             />
-            <circle cx={scaleLine.p1.x} cy={scaleLine.p1.y} r={(scaleDraggable ? 12 : 5) / scale} fill="#2196F3" stroke="white" strokeWidth={1.5 / scale} />
-            <circle cx={scaleLine.p2.x} cy={scaleLine.p2.y} r={(scaleDraggable ? 12 : 5) / scale} fill="#2196F3" stroke="white" strokeWidth={1.5 / scale} />
+            {/* Scale endpoints */}
+            {[scaleLine.p1, scaleLine.p2].map((p, i) => {
+              const isDragging = scaleDragIdx === i;
+              // When dragging: the stored point is already offset (above finger).
+              // Draw a pointer line from the point DOWN to where the finger is.
+              return (
+                <g key={`scale-${i}`}>
+                  {isDragging && (
+                    <>
+                      {/* Pointer line from lifted point down to finger position */}
+                      <line
+                        x1={p.x}
+                        y1={p.y}
+                        x2={p.x}
+                        y2={p.y + liftOffsetImg}
+                        stroke="#2196F3"
+                        strokeWidth={1.5 / scale}
+                        opacity={0.5}
+                      />
+                      {/* Small dot at finger position */}
+                      <circle
+                        cx={p.x}
+                        cy={p.y + liftOffsetImg}
+                        r={4 / scale}
+                        fill="#2196F3"
+                        opacity={0.4}
+                      />
+                    </>
+                  )}
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={(scaleDraggable ? 12 : 5) / scale}
+                    fill={isDragging ? '#1565C0' : '#2196F3'}
+                    stroke="white"
+                    strokeWidth={1.5 / scale}
+                  />
+                </g>
+              );
+            })}
           </>
         )}
 

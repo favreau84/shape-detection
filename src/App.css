@@ -385,6 +385,18 @@ body {
   color: var(--primary);
 }
 
+.area-value-blue {
+  color: var(--blue-500);
+}
+
+.scale-footer-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+
 .area-hint {
   font-size: 11px;
   color: var(--gray-600);

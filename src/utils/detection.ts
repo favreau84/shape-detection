@@ -22,12 +22,39 @@ function dataUrlToMat(dataUrl: string): Promise<{ mat: any; width: number; heigh
   });
 }
 
-// ─── Yellow ruler detection with auto-scale ───
+// ─── Yellow ruler detection with autocorrelation-based scale ───
 
 export interface RulerDetection {
   p1: Point;
   p2: Point;
   distanceCm: number;
+}
+
+/**
+ * Autocorrelation on a 1D signal to find dominant period.
+ */
+function findPeriodByAutocorrelation(signal: number[], minLag: number, maxLag: number): number | null {
+  // Normalize signal (subtract mean)
+  const mean = signal.reduce((a, b) => a + b, 0) / signal.length;
+  const centered = signal.map(v => v - mean);
+
+  let bestLag = 0;
+  let bestScore = -Infinity;
+
+  for (let lag = minLag; lag <= Math.min(maxLag, centered.length / 2); lag++) {
+    let sum = 0;
+    for (let i = 0; i < centered.length - lag; i++) {
+      sum += centered[i] * centered[i + lag];
+    }
+    if (sum > bestScore) {
+      bestScore = sum;
+      bestLag = lag;
+    }
+  }
+
+  // Validate: the autocorrelation peak should be significantly positive
+  if (bestScore <= 0 || bestLag <= minLag) return null;
+  return bestLag;
 }
 
 export async function detectRuler(dataUrl: string): Promise<RulerDetection | null> {
@@ -45,12 +72,10 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
   const yellowMask = new cv.Mat();
   cv.inRange(hsvMat, low, high, yellowMask);
 
-  // Close small gaps
   const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(7, 7));
   cv.morphologyEx(yellowMask, yellowMask, cv.MORPH_CLOSE, kernel);
   cv.morphologyEx(yellowMask, yellowMask, cv.MORPH_OPEN, kernel);
 
-  // Find contours of yellow area
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
   cv.findContours(yellowMask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
@@ -59,10 +84,7 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
   let maxIdx = -1;
   for (let i = 0; i < contours.size(); i++) {
     const area = cv.contourArea(contours.get(i));
-    if (area > maxArea) {
-      maxArea = area;
-      maxIdx = i;
-    }
+    if (area > maxArea) { maxArea = area; maxIdx = i; }
   }
 
   let result: RulerDetection | null = null;
@@ -75,7 +97,6 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
     const h = rect.size.height;
     const angle = rect.angle;
 
-    // Ruler long axis direction
     let longHalf: number;
     let rad: number;
     if (w >= h) {
@@ -89,28 +110,22 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
     const axisX = Math.cos(rad);
     const axisY = Math.sin(rad);
 
-    // ─── Detect tick marks ───
-    // Within the yellow mask, find dark pixels (the tick marks / numbers)
+    // ─── Detect tick marks via projection + autocorrelation ───
     const gray = new cv.Mat();
     cv.cvtColor(rgb, gray, cv.COLOR_RGB2GRAY);
 
-    // Dark pixels within yellow area = tick marks
     const darkThresh = new cv.Mat();
     cv.threshold(gray, darkThresh, 80, 255, cv.THRESH_BINARY_INV);
 
-    // Intersect with yellow mask (only dark pixels on the ruler)
     const tickMask = new cv.Mat();
     cv.bitwise_and(darkThresh, yellowMask, tickMask);
 
-    // Project each dark pixel onto the ruler's long axis
-    // axis direction = (axisX, axisY), origin = (cx, cy)
-    // projection = dot((px - cx, py - cy), (axisX, axisY))
+    // Project dark pixels onto the ruler's long axis → build 1D histogram
     const projections: number[] = [];
-    for (let y = 0; y < tickMask.rows; y++) {
-      for (let x = 0; x < tickMask.cols; x++) {
-        if (tickMask.ucharAt(y, x) > 0) {
-          const proj = (x - cx) * axisX + (y - cy) * axisY;
-          projections.push(proj);
+    for (let py = 0; py < tickMask.rows; py++) {
+      for (let px = 0; px < tickMask.cols; px++) {
+        if (tickMask.ucharAt(py, px) > 0) {
+          projections.push((px - cx) * axisX + (py - cy) * axisY);
         }
       }
     }
@@ -118,46 +133,26 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
     let pxPerCm: number | null = null;
 
     if (projections.length > 100) {
-      // Build histogram along the axis
       const minProj = Math.min(...projections);
       const maxProj = Math.max(...projections);
       const range = maxProj - minProj;
-      const binCount = Math.round(range);
-      if (binCount > 10) {
-        const histogram = new Array(binCount).fill(0);
-        for (const p of projections) {
-          const bin = Math.min(binCount - 1, Math.floor(p - minProj));
-          histogram[bin]++;
-        }
+      // Use ~1px bins
+      const binCount = Math.max(10, Math.round(range));
+      const histogram = new Array(binCount).fill(0);
+      for (const p of projections) {
+        const bin = Math.min(binCount - 1, Math.max(0, Math.floor(p - minProj)));
+        histogram[bin]++;
+      }
 
-        // Smooth the histogram
-        const smoothed = smoothArray(histogram, 3);
+      // Smooth heavily to suppress noise from numbers
+      const smoothed = smoothArray(histogram, 5);
 
-        // Find peaks (local maxima above a threshold)
-        const threshold = Math.max(...smoothed) * 0.3;
-        const peaks = findPeaks(smoothed, threshold, 8);
+      // Autocorrelation: find the dominant period
+      // For a typical ruler on a phone photo, 1cm ≈ 20-200 px
+      const period = findPeriodByAutocorrelation(smoothed, 15, Math.min(300, Math.floor(binCount / 2)));
 
-        if (peaks.length >= 3) {
-          // Compute spacings between consecutive peaks
-          const spacings: number[] = [];
-          for (let i = 1; i < peaks.length; i++) {
-            spacings.push(peaks[i] - peaks[i - 1]);
-          }
-
-          // The cm marks should have a regular spacing
-          // Find the most common spacing (median)
-          spacings.sort((a, b) => a - b);
-          const medianSpacing = spacings[Math.floor(spacings.length / 2)];
-
-          // Filter spacings close to the median (within 30%)
-          const validSpacings = spacings.filter(
-            s => s > medianSpacing * 0.7 && s < medianSpacing * 1.3
-          );
-
-          if (validSpacings.length >= 2) {
-            pxPerCm = validSpacings.reduce((a, b) => a + b, 0) / validSpacings.length;
-          }
-        }
+      if (period) {
+        pxPerCm = period;
       }
     }
 
@@ -165,9 +160,7 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
     darkThresh.delete();
     tickMask.delete();
 
-    if (pxPerCm && pxPerCm > 5) {
-      // Auto-calibrated: place a segment of a round cm value
-      // Choose a nice distance (5cm or 10cm) that fits within the ruler
+    if (pxPerCm && pxPerCm > 10) {
       const rulerLengthCm = (longHalf * 2) / pxPerCm;
       let segmentCm = 10;
       if (rulerLengthCm < 12) segmentCm = 5;
@@ -177,49 +170,25 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
       const segmentHalfPx = (segmentCm * pxPerCm) / 2;
 
       result = {
-        p1: {
-          x: Math.round(cx - axisX * segmentHalfPx),
-          y: Math.round(cy - axisY * segmentHalfPx),
-        },
-        p2: {
-          x: Math.round(cx + axisX * segmentHalfPx),
-          y: Math.round(cy + axisY * segmentHalfPx),
-        },
+        p1: { x: Math.round(cx - axisX * segmentHalfPx), y: Math.round(cy - axisY * segmentHalfPx) },
+        p2: { x: Math.round(cx + axisX * segmentHalfPx), y: Math.round(cy + axisY * segmentHalfPx) },
         distanceCm: segmentCm,
       };
     } else {
-      // Fallback: return the full ruler extent, user will need to specify
       result = {
-        p1: {
-          x: Math.round(cx - axisX * longHalf * 0.8),
-          y: Math.round(cy - axisY * longHalf * 0.8),
-        },
-        p2: {
-          x: Math.round(cx + axisX * longHalf * 0.8),
-          y: Math.round(cy + axisY * longHalf * 0.8),
-        },
-        distanceCm: 0, // 0 means "unknown, ask user"
+        p1: { x: Math.round(cx - axisX * longHalf * 0.8), y: Math.round(cy - axisY * longHalf * 0.8) },
+        p2: { x: Math.round(cx + axisX * longHalf * 0.8), y: Math.round(cy + axisY * longHalf * 0.8) },
+        distanceCm: 0,
       };
     }
 
-    // Ensure p1 is the left-most point
     if (result.p1.x > result.p2.x) {
-      const tmp = result.p1;
-      result.p1 = result.p2;
-      result.p2 = tmp;
+      const tmp = result.p1; result.p1 = result.p2; result.p2 = tmp;
     }
   }
 
-  // Clean up
-  mat.delete();
-  rgb.delete();
-  hsvMat.delete();
-  low.delete();
-  high.delete();
-  yellowMask.delete();
-  kernel.delete();
-  contours.delete();
-  hierarchy.delete();
+  mat.delete(); rgb.delete(); hsvMat.delete(); low.delete(); high.delete();
+  yellowMask.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
 
   return result;
 }
@@ -227,35 +196,27 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
 function smoothArray(arr: number[], radius: number): number[] {
   const result = new Array(arr.length).fill(0);
   for (let i = 0; i < arr.length; i++) {
-    let sum = 0;
-    let count = 0;
+    let sum = 0, count = 0;
     for (let j = Math.max(0, i - radius); j <= Math.min(arr.length - 1, i + radius); j++) {
-      sum += arr[j];
-      count++;
+      sum += arr[j]; count++;
     }
     result[i] = sum / count;
   }
   return result;
 }
 
-function findPeaks(arr: number[], threshold: number, minDistance: number): number[] {
-  const peaks: number[] = [];
-  for (let i = 1; i < arr.length - 1; i++) {
-    if (arr[i] > threshold && arr[i] >= arr[i - 1] && arr[i] >= arr[i + 1]) {
-      if (peaks.length === 0 || i - peaks[peaks.length - 1] >= minDistance) {
-        peaks.push(i);
-      }
-    }
-  }
-  return peaks;
-}
-
 // ─── Black contour detection ───
+// Targets a black marker outline drawn around a blister.
+// Strategy: hard threshold for very dark pixels, heavy morphology to fill
+// the ring into a solid blob, then find the largest blob-like contour
+// that overlaps with the center of the image.
 
 export async function detectBlackContour(dataUrl: string): Promise<Point[] | null> {
   await waitForOpenCV();
 
   const { mat } = await dataUrlToMat(dataUrl);
+  const imgW = mat.cols;
+  const imgH = mat.rows;
 
   const gray = new cv.Mat();
   cv.cvtColor(mat, gray, cv.COLOR_RGBA2GRAY);
@@ -263,17 +224,29 @@ export async function detectBlackContour(dataUrl: string): Promise<Point[] | nul
   const blurred = new cv.Mat();
   cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
 
+  // Hard threshold: detect only very dark pixels (the black marker)
   const binary = new cv.Mat();
-  cv.adaptiveThreshold(blurred, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 15, 10);
+  cv.threshold(blurred, binary, 60, 255, cv.THRESH_BINARY_INV);
 
-  const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
-  cv.morphologyEx(binary, binary, cv.MORPH_CLOSE, kernel);
+  // Heavy morphological closing to fill the marker ring into a solid blob
+  const closeKernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(25, 25));
+  cv.morphologyEx(binary, binary, cv.MORPH_CLOSE, closeKernel);
+
+  // Remove small noise
+  const openKernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5));
+  cv.morphologyEx(binary, binary, cv.MORPH_OPEN, openKernel);
 
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
   cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-  const imageArea = mat.rows * mat.cols;
+  const imageArea = imgW * imgH;
+  // Center zone: contour must overlap with center 60% of image
+  const cx1 = imgW * 0.2;
+  const cy1 = imgH * 0.2;
+  const cx2 = imgW * 0.8;
+  const cy2 = imgH * 0.8;
+
   let bestIdx = -1;
   let bestScore = 0;
 
@@ -281,19 +254,35 @@ export async function detectBlackContour(dataUrl: string): Promise<Point[] | nul
     const cnt = contours.get(i);
     const area = cv.contourArea(cnt);
 
-    if (area < imageArea * 0.001 || area > imageArea * 0.5) continue;
+    // Must be significant but not huge
+    if (area < imageArea * 0.002 || area > imageArea * 0.4) continue;
 
     const perimeter = cv.arcLength(cnt, true);
     const circularity = (4 * Math.PI * area) / (perimeter * perimeter);
 
-    if (circularity < 0.1) continue;
+    // Must be somewhat blob-shaped
+    if (circularity < 0.15) continue;
 
+    // Bounding rect
     const brect = cv.boundingRect(cnt);
     const aspect = Math.max(brect.width, brect.height) / Math.min(brect.width, brect.height);
+    if (aspect > 4) continue;
 
-    if (aspect > 5) continue;
+    // Must overlap with center zone
+    const bx2 = brect.x + brect.width;
+    const by2 = brect.y + brect.height;
+    const overlapsCenter = brect.x < cx2 && bx2 > cx1 && brect.y < cy2 && by2 > cy1;
+    if (!overlapsCenter) continue;
 
-    const score = area * circularity;
+    // Score: prefer centered, large, round contours
+    const centerX = brect.x + brect.width / 2;
+    const centerY = brect.y + brect.height / 2;
+    const distToCenter = Math.sqrt(
+      ((centerX - imgW / 2) / imgW) ** 2 + ((centerY - imgH / 2) / imgH) ** 2
+    );
+    const centerBonus = 1 - distToCenter; // closer to center = higher
+
+    const score = area * circularity * centerBonus;
     if (score > bestScore) {
       bestScore = score;
       bestIdx = i;
@@ -317,22 +306,14 @@ export async function detectBlackContour(dataUrl: string): Promise<Point[] | nul
 
     result = [];
     for (let j = 0; j < approx.rows; j++) {
-      result.push({
-        x: approx.intAt(j, 0),
-        y: approx.intAt(j, 1),
-      });
+      result.push({ x: approx.intAt(j, 0), y: approx.intAt(j, 1) });
     }
 
     approx.delete();
   }
 
-  mat.delete();
-  gray.delete();
-  blurred.delete();
-  binary.delete();
-  kernel.delete();
-  contours.delete();
-  hierarchy.delete();
+  mat.delete(); gray.delete(); blurred.delete(); binary.delete();
+  closeKernel.delete(); openKernel.delete(); contours.delete(); hierarchy.delete();
 
   return result;
 }

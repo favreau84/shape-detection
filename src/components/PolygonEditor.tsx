@@ -280,13 +280,15 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
     }
   }, [tool, scaleRef, viewport]);
 
+  const DRAG_OFFSET_PX = 60; // Lift point above finger
+
   const handleScalePointerMove = useCallback((e: React.PointerEvent) => {
     if (scaleDragIdx === null || !scaleRef) return;
     const container = viewport.containerRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
     const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
+    const sy = e.clientY - rect.top - DRAG_OFFSET_PX; // Offset above finger
     const imgPt = screenToImage(
       sx, sy,
       viewport.state.offsetX, viewport.state.offsetY, viewport.state.scale
@@ -388,6 +390,8 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
             dragIndex={dragIndex}
             activeTool={tool}
             crosshairImagePos={getCrosshairImagePos()}
+            scaleDragIdx={scaleDragIdx}
+            dragOffsetPx={DRAG_OFFSET_PX}
           />
         </MapViewport>
 
@@ -476,6 +480,17 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
               </button>
             )}
           </>
+        ) : tool === 'scale' && scaleRef ? (
+          <div className="draw-controls">
+            <div className="scale-footer-info">
+              <span className="area-label">Échelle</span>
+              <span className="area-value area-value-blue">{scaleRef.valueCm.toFixed(1)} cm</span>
+              <span className="area-hint">Ajustez les extrémités si besoin</span>
+            </div>
+            <button className="btn btn-primary" onClick={() => setTool('shape')}>
+              OK
+            </button>
+          </div>
         ) : (
           <div className="draw-controls">
             <div className="draw-buttons">
