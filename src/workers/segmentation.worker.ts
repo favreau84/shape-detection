@@ -16,43 +16,64 @@ async function loadModel() {
 
 type Pt = { x: number; y: number };
 
-// ─── Mask → polygon contour ───
+// ─── Convex Hull (Graham Scan) ───
 
-function maskToContour(mask: Float32Array | Uint8Array, width: number, height: number): Pt[] {
-  const grid: boolean[][] = [];
-  for (let y = 0; y < height; y++) {
-    grid[y] = [];
-    for (let x = 0; x < width; x++) {
-      grid[y][x] = mask[y * width + x] > 0.5;
+function cross(o: Pt, a: Pt, b: Pt): number {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+function convexHull(points: Pt[]): Pt[] {
+  if (points.length <= 3) return points;
+
+  // Sort by x, then y
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  const n = sorted.length;
+
+  // Build lower hull
+  const lower: Pt[] = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
     }
+    lower.push(p);
   }
 
+  // Build upper hull
+  const upper: Pt[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+
+  // Remove last point of each half because it's repeated
+  lower.pop();
+  upper.pop();
+
+  return [...lower, ...upper];
+}
+
+// ─── Mask → boundary points ───
+
+function maskToBoundary(mask: Float32Array | Uint8Array, width: number, height: number): Pt[] {
   const boundaryPoints: Pt[] = [];
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
-      if (grid[y][x]) {
-        if (!grid[y - 1][x] || !grid[y + 1][x] || !grid[y][x - 1] || !grid[y][x + 1]) {
+      if (mask[y * width + x] > 0.5) {
+        if (
+          mask[(y - 1) * width + x] <= 0.5 ||
+          mask[(y + 1) * width + x] <= 0.5 ||
+          mask[y * width + (x - 1)] <= 0.5 ||
+          mask[y * width + (x + 1)] <= 0.5
+        ) {
           boundaryPoints.push({ x, y });
         }
       }
     }
   }
-
-  if (boundaryPoints.length === 0) return [];
-
-  // Sort by angle from centroid
-  const cx = boundaryPoints.reduce((s, p) => s + p.x, 0) / boundaryPoints.length;
-  const cy = boundaryPoints.reduce((s, p) => s + p.y, 0) / boundaryPoints.length;
-  boundaryPoints.sort((a, b) =>
-    Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx)
-  );
-
-  // Uniform sampling then RDP
-  const maxSample = 300;
-  const step = Math.max(1, Math.floor(boundaryPoints.length / maxSample));
-  const sampled = boundaryPoints.filter((_, i) => i % step === 0);
-
-  return sampled;
+  return boundaryPoints;
 }
 
 // ─── RDP simplification ───
@@ -90,32 +111,26 @@ function perpendicularDist(p: Pt, a: Pt, b: Pt): number {
   return Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / len;
 }
 
-/**
- * Simplify to at most maxPoints using increasing epsilon.
- */
 function simplifyToMax(points: Pt[], maxPoints: number): Pt[] {
   let eps = 2;
   let result = rdpSimplify(points, eps);
-  while (result.length > maxPoints && eps < 200) {
+  while (result.length > maxPoints && eps < 500) {
     eps *= 1.5;
     result = rdpSimplify(points, eps);
   }
   return result;
 }
 
-// ─── Card detection: find min-area rectangle from mask ───
+// ─── Card detection: min-area rectangle ───
 
-function maskToMinAreaRect(mask: Float32Array | Uint8Array, width: number, height: number): { corners: Pt[]; widthPx: number; heightPx: number } | null {
-  // Get contour
-  const contour = maskToContour(mask, width, height);
-  if (contour.length < 10) return null;
+function minAreaRect(boundary: Pt[]): { corners: Pt[]; widthPx: number; heightPx: number } | null {
+  const hull = convexHull(boundary);
+  if (hull.length < 4) return null;
 
-  // Rotating calipers approximation:
-  // Try many angles, find the one that gives the smallest bounding box
   let bestArea = Infinity;
   let bestRect: { corners: Pt[]; w: number; h: number } | null = null;
 
-  for (let deg = 0; deg < 90; deg += 1) {
+  for (let deg = 0; deg < 90; deg += 0.5) {
     const rad = (deg * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
@@ -123,7 +138,7 @@ function maskToMinAreaRect(mask: Float32Array | Uint8Array, width: number, heigh
     let minU = Infinity, maxU = -Infinity;
     let minV = Infinity, maxV = -Infinity;
 
-    for (const p of contour) {
+    for (const p of hull) {
       const u = p.x * cos + p.y * sin;
       const v = -p.x * sin + p.y * cos;
       if (u < minU) minU = u;
@@ -138,7 +153,6 @@ function maskToMinAreaRect(mask: Float32Array | Uint8Array, width: number, heigh
 
     if (area < bestArea) {
       bestArea = area;
-      // Compute 4 corners in original space
       const corners: Pt[] = [
         { x: minU * cos - minV * sin, y: minU * sin + minV * cos },
         { x: maxU * cos - minV * sin, y: maxU * sin + minV * cos },
@@ -151,11 +165,11 @@ function maskToMinAreaRect(mask: Float32Array | Uint8Array, width: number, heigh
 
   if (!bestRect) return null;
 
-  // Ensure width > height (landscape card orientation)
-  const widthPx = Math.max(bestRect.w, bestRect.h);
-  const heightPx = Math.min(bestRect.w, bestRect.h);
-
-  return { corners: bestRect.corners, widthPx, heightPx };
+  return {
+    corners: bestRect.corners,
+    widthPx: Math.max(bestRect.w, bestRect.h),
+    heightPx: Math.min(bestRect.w, bestRect.h),
+  };
 }
 
 // ─── Downscale ───
@@ -189,7 +203,7 @@ function downscaleImageData(
   return { data: out, width: nw, height: nh, scaleX: width / nw, scaleY: height / nh };
 }
 
-// ─── Run SAM and get mask ───
+// ─── Run SAM ───
 
 async function runSam(imageData: ArrayBuffer, origWidth: number, origHeight: number) {
   await loadModel();
@@ -209,21 +223,22 @@ async function runSam(imageData: ArrayBuffer, origWidth: number, origHeight: num
   return { maskData, maskW, maskH, w, h, scaleX, scaleY };
 }
 
-// ─── Shape detection: blob polygon ≤50 points ───
+// ─── Shape detection ───
 
 async function detectShape(imageData: ArrayBuffer, origWidth: number, origHeight: number) {
   self.postMessage({ type: 'status', message: 'Détection de la forme...' });
 
   const { maskData, maskW, maskH, w, h, scaleX, scaleY } = await runSam(imageData, origWidth, origHeight);
 
-  const contour = maskToContour(maskData, maskW, maskH);
-  if (contour.length === 0) {
+  const boundary = maskToBoundary(maskData, maskW, maskH);
+  if (boundary.length < 10) {
     throw new Error('Aucune forme détectée');
   }
 
-  const simplified = simplifyToMax(contour, 40);
+  // Convex hull then simplify
+  const hull = convexHull(boundary);
+  const simplified = simplifyToMax(hull, 40);
 
-  // Scale back: mask → downscaled → original
   const mScaleX = w / maskW;
   const mScaleY = h / maskH;
   const polygon = simplified.map(p => ({
@@ -234,9 +249,8 @@ async function detectShape(imageData: ArrayBuffer, origWidth: number, origHeight
   return polygon;
 }
 
-// ─── Card detection: find rectangle + compute scale ───
+// ─── Card detection ───
 
-// Standard card: 85.6mm × 53.98mm
 const CARD_WIDTH_CM = 8.56;
 const CARD_HEIGHT_CM = 5.398;
 
@@ -245,12 +259,16 @@ async function detectCard(imageData: ArrayBuffer, origWidth: number, origHeight:
 
   const { maskData, maskW, maskH, w, h, scaleX, scaleY } = await runSam(imageData, origWidth, origHeight);
 
-  const rect = maskToMinAreaRect(maskData, maskW, maskH);
+  const boundary = maskToBoundary(maskData, maskW, maskH);
+  if (boundary.length < 10) {
+    throw new Error('Aucune carte détectée');
+  }
+
+  const rect = minAreaRect(boundary);
   if (!rect) {
     throw new Error('Aucune carte détectée');
   }
 
-  // Scale corners back to original image
   const mScaleX = w / maskW;
   const mScaleY = h / maskH;
   const corners = rect.corners.map(p => ({
@@ -258,33 +276,25 @@ async function detectCard(imageData: ArrayBuffer, origWidth: number, origHeight:
     y: Math.round(p.y * mScaleY * scaleY),
   }));
 
-  // Compute diagonal in original image pixels
+  const diagPx = Math.sqrt(
+    (corners[0].x - corners[2].x) ** 2 + (corners[0].y - corners[2].y) ** 2
+  );
+  const diagCm = Math.sqrt(CARD_WIDTH_CM ** 2 + CARD_HEIGHT_CM ** 2);
+
+  // Check aspect ratio
   const widthPx = rect.widthPx * mScaleX * scaleX;
   const heightPx = rect.heightPx * mScaleY * scaleY;
-
-  // Use the longest side of the detected rect to determine scale
-  // Card aspect ratio: 85.6 / 53.98 ≈ 1.586
   const detectedRatio = widthPx / heightPx;
   const cardRatio = CARD_WIDTH_CM / CARD_HEIGHT_CM;
-
-  // Check if aspect ratio is roughly card-like (within 40% tolerance)
-  const ratioMatch = detectedRatio > cardRatio * 0.6 && detectedRatio < cardRatio * 1.4;
-
-  // Use the diagonal for most robust scale reference
-  const diagPx = Math.sqrt(widthPx * widthPx + heightPx * heightPx);
-  const diagCm = Math.sqrt(CARD_WIDTH_CM * CARD_WIDTH_CM + CARD_HEIGHT_CM * CARD_HEIGHT_CM);
-
-  // Pick two opposite corners for the scale line
-  const p1 = corners[0];
-  const p2 = corners[2];
+  const isCardLike = detectedRatio > cardRatio * 0.6 && detectedRatio < cardRatio * 1.4;
 
   return {
     corners,
-    p1,
-    p2,
+    p1: corners[0],
+    p2: corners[2],
     diagPx,
     diagCm,
-    isCardLike: ratioMatch,
+    isCardLike,
   };
 }
 

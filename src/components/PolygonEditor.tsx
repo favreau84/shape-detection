@@ -19,6 +19,8 @@ interface Props {
   detectedCard: CardDetection | null;
   detecting: boolean;
   detectionStatus: string;
+  detectionError: string | null;
+  onClearError: () => void;
   onRequestDetection: (mode: DrawTool) => void;
   onDone: (points: Point[], area: number, scale: ScaleRef | null) => void;
   onBack: () => void;
@@ -26,7 +28,7 @@ interface Props {
 
 const CLOSE_THRESHOLD_PX = 30;
 
-export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCard, detecting, detectionStatus, onRequestDetection, onDone, onBack }: Props) {
+export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCard, detecting, detectionStatus, detectionError, onClearError, onRequestDetection, onDone, onBack }: Props) {
   const [shapePoints, setShapePoints] = useState<Point[]>([]);
   const [closed, setClosed] = useState(false);
   const [mode, setMode] = useState<EditorMode>('draw');
@@ -35,9 +37,11 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCa
   const [scaleRef, setScaleRef] = useState<ScaleRef | null>(null);
   const [showScaleModal, setShowScaleModal] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const viewport = useViewport();
   const imageLoaded = useRef(false);
   const dragStartPos = useRef<Point | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset view when image loads
   useEffect(() => {
@@ -69,6 +73,21 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCa
       setTool('shape');
     }
   }, [detectedCard]);
+
+  // Show toast on detection error
+  useEffect(() => {
+    if (detectionError) {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      setToast(detectionError);
+      toastTimer.current = setTimeout(() => {
+        setToast(null);
+        onClearError();
+      }, 3000);
+    }
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, [detectionError, onClearError]);
 
   const points = tool === 'shape' ? shapePoints : scalePoints;
 
@@ -420,6 +439,13 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedCa
           onCancel={handleScaleCancel}
           onUseCreditCard={handleUseCreditCard}
         />
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="toast" onClick={() => { setToast(null); onClearError(); }}>
+          {toast}
+        </div>
       )}
     </div>
   );

@@ -22,6 +22,7 @@ export default function App() {
   const [detectedCard, setDetectedCard] = useState<CardDetection | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState('');
+  const [detectionError, setDetectionError] = useState<string | null>(null);
 
   const workerRef = useRef<Worker | null>(null);
   const imageSrcRef = useRef<string>('');
@@ -65,16 +66,17 @@ export default function App() {
         } else if (data.type === 'error') {
           console.warn('Segmentation error:', data.message);
           setDetecting(false);
-          setDetectionStatus('Détection échouée');
+          setDetectionError(data.message || 'Détection échouée');
         }
       };
 
       worker.onerror = () => {
         setDetecting(false);
-        setDetectionStatus('Détection échouée');
+        setDetectionError('Détection échouée');
       };
 
       setDetecting(true);
+      setDetectionError(null);
       setDetectionStatus(mode === 'scale' ? 'Détection de la carte...' : 'Détection de la forme...');
 
       worker.postMessage({
@@ -145,6 +147,8 @@ export default function App() {
           detectedCard={detectedCard}
           detecting={detecting}
           detectionStatus={detectionStatus}
+          detectionError={detectionError}
+          onClearError={() => setDetectionError(null)}
           onRequestDetection={startSegmentation}
           onDone={handleDone}
           onBack={handleBack}
