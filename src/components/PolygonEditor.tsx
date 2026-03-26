@@ -37,6 +37,7 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
   const [scaleRef, setScaleRef] = useState<ScaleRef | null>(null);
   const [showScaleModal, setShowScaleModal] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [scaleDragIdx, setScaleDragIdx] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const viewport = useViewport();
   const imageLoaded = useRef(false);
@@ -50,6 +51,13 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
       viewport.resetView(imageSize.width, imageSize.height);
     }
   }, [imageSize, viewport]);
+
+  // Always unlock viewport when tool or mode changes
+  useEffect(() => {
+    viewport.setLocked(false);
+    setScaleDragIdx(null);
+    setDragIndex(null);
+  }, [tool, mode, viewport]);
 
   // Apply detected polygon (shape mode)
   useEffect(() => {
@@ -254,8 +262,6 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
   }, []);
 
   // Scale endpoint drag handling
-  const [scaleDragIdx, setScaleDragIdx] = useState<number | null>(null);
-
   const handleScalePointerDown = useCallback((e: React.PointerEvent) => {
     if (tool !== 'scale' || !scaleRef) return;
     const container = viewport.containerRef.current;
@@ -487,7 +493,7 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
               <span className="area-value area-value-blue">{scaleRef.valueCm.toFixed(1)} cm</span>
               <span className="area-hint">Ajustez les extrémités si besoin</span>
             </div>
-            <button className="btn btn-primary" onClick={() => { viewport.setLocked(false); setTool('shape'); }}>
+            <button className="btn btn-primary" onClick={() => setTool('shape')}>
               OK
             </button>
           </div>

@@ -28,19 +28,18 @@ export interface RulerDetection {
   p1: Point;
   p2: Point;
   distanceCm: number;
-  /** Direction vector along the ruler (unit) */
   axisX: number;
   axisY: number;
-  /** Perpendicular offset to center-line of the ruler (image px) */
-  rulerCenterY: number;
 }
 
-/**
- * Autocorrelation to find dominant period in a signal.
- */
 function findPeriodByAutocorrelation(signal: number[], minLag: number, maxLag: number): number | null {
   const mean = signal.reduce((a, b) => a + b, 0) / signal.length;
   const centered = signal.map(v => v - mean);
+
+  // Normalize by variance at lag 0
+  let variance = 0;
+  for (const v of centered) variance += v * v;
+  if (variance === 0) return null;
 
   let bestLag = 0;
   let bestScore = -Infinity;
@@ -50,13 +49,15 @@ function findPeriodByAutocorrelation(signal: number[], minLag: number, maxLag: n
     for (let i = 0; i < centered.length - lag; i++) {
       sum += centered[i] * centered[i + lag];
     }
-    if (sum > bestScore) {
-      bestScore = sum;
+    const normalized = sum / variance;
+    if (normalized > bestScore) {
+      bestScore = normalized;
       bestLag = lag;
     }
   }
 
-  if (bestScore <= 0 || bestLag <= minLag) return null;
+  // Must have a clear periodic signal
+  if (bestScore < 0.1 || bestLag <= minLag) return null;
   return bestLag;
 }
 
@@ -112,71 +113,108 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
     const angle = rect.angle;
 
     let longHalf: number;
+    let shortHalf: number;
     let rad: number;
     if (w >= h) {
       longHalf = w / 2;
+      shortHalf = h / 2;
       rad = (angle * Math.PI) / 180;
     } else {
       longHalf = h / 2;
+      shortHalf = w / 2;
       rad = ((angle + 90) * Math.PI) / 180;
     }
 
-    const axisX = Math.cos(rad);
-    const axisY = Math.sin(rad);
+    // Axis direction: ensure it points to the RIGHT (positive x)
+    let axisX = Math.cos(rad);
+    let axisY = Math.sin(rad);
+    if (axisX < 0) { axisX = -axisX; axisY = -axisY; }
 
-    // ─── Detect tick marks ───
+    // ─── Detect tick marks using "tall column" approach ───
+    // For each position along the axis, measure how many dark pixels span
+    // the ruler's full height at that position.
+    // Tick marks (cm) span most of the ruler height.
+    // Numbers only span the middle portion.
     const gray = new cv.Mat();
     cv.cvtColor(rgb, gray, cv.COLOR_RGB2GRAY);
     const darkThresh = new cv.Mat();
-    cv.threshold(gray, darkThresh, 80, 255, cv.THRESH_BINARY_INV);
+    cv.threshold(gray, darkThresh, 60, 255, cv.THRESH_BINARY_INV);
     const tickMask = new cv.Mat();
     cv.bitwise_and(darkThresh, yellowMask, tickMask);
 
-    // Project dark pixels onto the ruler's long axis
-    const projections: number[] = [];
+    // Build a 1D profile: for each position along the axis, count dark pixels
+    // across the ruler width (perpendicular direction)
+    const BIN_SIZE = 2; // 2px per bin along axis
+    const numBins = Math.ceil((longHalf * 2) / BIN_SIZE);
+    const profile = new Array(numBins).fill(0);
+
+    // Also track the "height ratio" — what fraction of the ruler width has dark pixels
+    // This helps distinguish tick marks (full height) from numbers (partial)
+    const heightProfile = new Array(numBins).fill(0);
+
     for (let py = 0; py < tickMask.rows; py++) {
       for (let px = 0; px < tickMask.cols; px++) {
         if (tickMask.ucharAt(py, px) > 0) {
-          projections.push((px - cx) * axisX + (py - cy) * axisY);
+          // Project onto axis
+          const proj = (px - cx) * axisX + (py - cy) * axisY;
+          const bin = Math.floor((proj + longHalf) / BIN_SIZE);
+          if (bin >= 0 && bin < numBins) {
+            profile[bin]++;
+          }
         }
       }
     }
 
-    let pxPerCm: number | null = null;
-
-    if (projections.length > 100) {
-      const minProj = Math.min(...projections);
-      const maxProj = Math.max(...projections);
-      const range = maxProj - minProj;
-      const binCount = Math.max(10, Math.round(range));
-      const histogram = new Array(binCount).fill(0);
-      for (const p of projections) {
-        const bin = Math.min(binCount - 1, Math.max(0, Math.floor(p - minProj)));
-        histogram[bin]++;
-      }
-
-      const smoothed = smoothArray(histogram, 5);
-
-      // Autocorrelation to find cm spacing
-      const period = findPeriodByAutocorrelation(smoothed, 15, Math.min(300, Math.floor(binCount / 2)));
-      if (period) {
-        pxPerCm = period;
-      }
+    // Normalize profile by ruler width to get height ratio per bin
+    const expectedWidth = shortHalf * 2;
+    for (let i = 0; i < numBins; i++) {
+      heightProfile[i] = profile[i] / (expectedWidth * BIN_SIZE + 1);
     }
 
     gray.delete();
     darkThresh.delete();
     tickMask.delete();
 
-    // Find the ruler endpoint (leftmost or rightmost end of the yellow band)
-    // The ruler tip = the extreme projection along the axis
-    // p1 = tip of the ruler, p2 = p1 + N cm along the axis
-    const tipProj = -longHalf; // most negative projection = left end of ruler
-    const tipX = cx + axisX * tipProj;
-    const tipY = cy + axisY * tipProj;
+    let pxPerCm: number | null = null;
+
+    if (numBins > 20) {
+      // Smooth the height profile — tick marks are narrow tall peaks
+      const smoothed = smoothArray(heightProfile, 3);
+
+      // Autocorrelation on the profile to find the cm period
+      // At BIN_SIZE=2, a 50px/cm ruler has period=25 bins
+      const minLagBins = Math.max(5, Math.floor(10 / BIN_SIZE)); // at least 10px
+      const maxLagBins = Math.min(200, Math.floor(numBins / 2));
+
+      const period = findPeriodByAutocorrelation(smoothed, minLagBins, maxLagBins);
+      if (period) {
+        pxPerCm = period * BIN_SIZE; // Convert from bins back to pixels
+      }
+    }
+
+    // Find the actual leftmost point of yellow band (ruler tip)
+    // Scan the ruler contour for the point with the most negative axis projection
+    const cnt = contours.get(maxIdx);
+    let minAxisProj = Infinity;
+    let tipPoint: Point = { x: cx - axisX * longHalf, y: cy - axisY * longHalf };
+
+    for (let j = 0; j < cnt.rows; j++) {
+      const px = cnt.intAt(j, 0);
+      const py = cnt.intAt(j, 1);
+      const proj = (px - cx) * axisX + (py - cy) * axisY;
+      if (proj < minAxisProj) {
+        minAxisProj = proj;
+        // Project back to the ruler center line (not the edge of the contour)
+        const axisPos = proj;
+        tipPoint = {
+          x: cx + axisX * axisPos,
+          y: cy + axisY * axisPos,
+        };
+      }
+    }
 
     if (pxPerCm && pxPerCm > 10) {
-      // Choose a nice round cm count that fits
+      // Choose a round cm value that fits in the ruler
       const rulerLengthCm = (longHalf * 2) / pxPerCm;
       let segmentCm = 10;
       if (rulerLengthCm < 12) segmentCm = 5;
@@ -185,26 +223,21 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
 
       const segmentPx = segmentCm * pxPerCm;
 
+      // p1 = ruler tip (leftmost), p2 = tip + N cm along the axis
       result = {
-        p1: { x: Math.round(tipX), y: Math.round(tipY) },
-        p2: { x: Math.round(tipX + axisX * segmentPx), y: Math.round(tipY + axisY * segmentPx) },
+        p1: { x: Math.round(tipPoint.x), y: Math.round(tipPoint.y) },
+        p2: { x: Math.round(tipPoint.x + axisX * segmentPx), y: Math.round(tipPoint.y + axisY * segmentPx) },
         distanceCm: segmentCm,
         axisX, axisY,
-        rulerCenterY: cy,
       };
     } else {
+      // Fallback: return full ruler, user specifies distance
       result = {
-        p1: { x: Math.round(cx - axisX * longHalf * 0.8), y: Math.round(cy - axisY * longHalf * 0.8) },
-        p2: { x: Math.round(cx + axisX * longHalf * 0.8), y: Math.round(cy + axisY * longHalf * 0.8) },
+        p1: { x: Math.round(tipPoint.x), y: Math.round(tipPoint.y) },
+        p2: { x: Math.round(cx + axisX * longHalf * 0.9), y: Math.round(cy + axisY * longHalf * 0.9) },
         distanceCm: 0,
         axisX, axisY,
-        rulerCenterY: cy,
       };
-    }
-
-    // Ensure p1 is the left-most point
-    if (result.p1.x > result.p2.x) {
-      const tmp = result.p1; result.p1 = result.p2; result.p2 = tmp;
     }
   }
 
