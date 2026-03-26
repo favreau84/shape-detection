@@ -12,3 +12,11 @@ export interface ViewportState {
 export type AppPhase = 'capture' | 'draw' | 'result';
 
 export type EditorMode = 'draw' | 'edit';
+
+export type DrawTool = 'shape' | 'scale';
+
+export interface ScaleRef {
+  p1: Point;
+  p2: Point;
+  valueCm: number;
+}
