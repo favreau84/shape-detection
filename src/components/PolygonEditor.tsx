@@ -127,10 +127,6 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
     }
   }, [mode, viewport]);
 
-  const handleToolToggle = useCallback(() => {
-    setTool(prev => prev === 'shape' ? 'scale' : 'shape');
-  }, []);
-
   const handleScaleConfirm = useCallback((valueCm: number) => {
     if (scalePoints.length === 2) {
       setScaleRef({ p1: scalePoints[0], p2: scalePoints[1], valueCm });
@@ -252,29 +248,6 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
         </div>
       </div>
 
-      {/* Detection spinner overlay */}
-      {detecting && (
-        <div className="detection-overlay">
-          <div className="spinner" />
-          <span>{detectionStatus}</span>
-        </div>
-      )}
-
-      {/* Scale badge */}
-      {scaleRef && (
-        <div className="scale-badge" onClick={handleClearScale}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1="2" y1="10" x2="2" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1="2" y1="12" x2="4" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1="10" y1="2" x2="12" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1="12" y1="2" x2="12" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-          {scaleRef.valueCm.toFixed(1)} cm
-          <span className="scale-badge-x">&times;</span>
-        </div>
-      )}
-
       {/* Viewport */}
       <div
         className="editor-viewport"
@@ -297,6 +270,42 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
             activeTool={tool}
           />
         </MapViewport>
+
+        {/* Tool toggle overlay - on top of the image */}
+        {mode === 'draw' && (
+          <div className="viewport-top-bar">
+            <div className="tool-toggle">
+              <button
+                className={`tool-toggle-btn ${tool === 'shape' ? 'active' : ''}`}
+                onClick={() => setTool('shape')}
+              >
+                Forme
+              </button>
+              <button
+                className={`tool-toggle-btn ${tool === 'scale' ? 'active' : ''}`}
+                onClick={() => setTool('scale')}
+              >
+                Échelle
+              </button>
+            </div>
+
+            {/* Scale badge */}
+            {scaleRef && (
+              <div className="scale-badge" onClick={handleClearScale}>
+                {scaleRef.valueCm.toFixed(1)} cm
+                <span className="scale-badge-x">&times;</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Detection spinner overlay */}
+        {detecting && (
+          <div className="detection-overlay">
+            <div className="spinner" />
+            <span>{detectionStatus}</span>
+          </div>
+        )}
 
         {/* Crosshair - visible in draw mode when not closed (shape) or scale not done */}
         {mode === 'draw' && !(tool === 'shape' && closed) && !(tool === 'scale' && scalePoints.length >= 2) && (
@@ -322,42 +331,13 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
               {!scaleRef && <span className="area-hint">Ajoutez une échelle pour obtenir des cm²</span>}
             </div>
             {mode !== 'edit' && (
-              <div className="footer-buttons">
-                <button className="btn btn-secondary" onClick={handleToolToggle}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    <line x1="2" y1="12" x2="2" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    <line x1="2" y1="14" x2="4" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    <line x1="12" y1="2" x2="14" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    <line x1="14" y1="2" x2="14" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  Échelle
-                </button>
-                <button className="btn btn-primary" onClick={handleDone}>
-                  Valider
-                </button>
-              </div>
+              <button className="btn btn-primary" onClick={handleDone}>
+                Valider
+              </button>
             )}
           </>
         ) : (
           <div className="draw-controls">
-            {/* Tool toggle */}
-            {!closed && (
-              <div className="tool-toggle">
-                <button
-                  className={`tool-toggle-btn ${tool === 'shape' ? 'active' : ''}`}
-                  onClick={() => setTool('shape')}
-                >
-                  Forme
-                </button>
-                <button
-                  className={`tool-toggle-btn ${tool === 'scale' ? 'active' : ''}`}
-                  onClick={() => setTool('scale')}
-                >
-                  Échelle
-                </button>
-              </div>
-            )}
             <div className="draw-buttons">
               <button
                 className="btn btn-secondary"
