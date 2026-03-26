@@ -487,7 +487,7 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
               <span className="area-value area-value-blue">{scaleRef.valueCm.toFixed(1)} cm</span>
               <span className="area-hint">Ajustez les extrémités si besoin</span>
             </div>
-            <button className="btn btn-primary" onClick={() => setTool('shape')}>
+            <button className="btn btn-primary" onClick={() => { viewport.setLocked(false); setTool('shape'); }}>
               OK
             </button>
           </div>

@@ -47,12 +47,14 @@ export function InteractionLayer({
   const showLeader = !closed
     && crosshairImagePos
     && activePoints.length > 0
-    && !(activeTool === 'scale' && scalePoints.length >= 2);
+    && !(activeTool === 'scale' && (scalePoints.length >= 2 || scaleRef));
   const lastPoint = activePoints.length > 0 ? activePoints[activePoints.length - 1] : null;
   const leaderColor = activeTool === 'scale' ? '#2196F3' : '#F57C00';
 
-  // Offset in image coords for the lifted drag indicator
   const liftOffsetImg = dragOffsetPx / scale;
+
+  // Compute endcap height for scale indicator (perpendicular ticks)
+  const endcapH = 16 / scale;
 
   return (
     <svg
@@ -69,61 +71,94 @@ export function InteractionLayer({
       <g transform={`translate(${offsetX}, ${offsetY}) scale(${scale})`}>
         <image href={imageSrc} width={imageWidth} height={imageHeight} />
 
-        {/* Scale reference line */}
-        {scaleLine && (
-          <>
-            <line
-              x1={scaleLine.p1.x}
-              y1={scaleLine.p1.y}
-              x2={scaleLine.p2.x}
-              y2={scaleLine.p2.y}
-              stroke="#2196F3"
-              strokeWidth={2.5 / scale}
-              strokeDasharray={`${6 / scale} ${4 / scale}`}
-              strokeLinecap="round"
-            />
-            {/* Scale endpoints */}
-            {[scaleLine.p1, scaleLine.p2].map((p, i) => {
-              const isDragging = scaleDragIdx === i;
-              // When dragging: the stored point is already offset (above finger).
-              // Draw a pointer line from the point DOWN to where the finger is.
-              return (
-                <g key={`scale-${i}`}>
-                  {isDragging && (
-                    <>
-                      {/* Pointer line from lifted point down to finger position */}
-                      <line
-                        x1={p.x}
-                        y1={p.y}
-                        x2={p.x}
-                        y2={p.y + liftOffsetImg}
-                        stroke="#2196F3"
-                        strokeWidth={1.5 / scale}
-                        opacity={0.5}
-                      />
-                      {/* Small dot at finger position */}
-                      <circle
-                        cx={p.x}
-                        cy={p.y + liftOffsetImg}
-                        r={4 / scale}
-                        fill="#2196F3"
-                        opacity={0.4}
-                      />
-                    </>
-                  )}
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={(scaleDraggable ? 12 : 5) / scale}
-                    fill={isDragging ? '#1565C0' : '#2196F3'}
-                    stroke="white"
-                    strokeWidth={1.5 / scale}
-                  />
-                </g>
-              );
-            })}
-          </>
-        )}
+        {/* Scale indicator: horizontal bar + vertical endcaps */}
+        {scaleLine && (() => {
+          const { p1, p2 } = scaleLine;
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len === 0) return null;
+          // Perpendicular direction (pointing "down" from the bar)
+          const perpX = -dy / len;
+          const perpY = dx / len;
+
+          return (
+            <>
+              {/* Main horizontal bar */}
+              <line
+                x1={p1.x} y1={p1.y}
+                x2={p2.x} y2={p2.y}
+                stroke="#2196F3"
+                strokeWidth={2.5 / scale}
+                strokeLinecap="round"
+              />
+              {/* Left endcap: vertical tick going down to ruler centerline */}
+              <line
+                x1={p1.x} y1={p1.y}
+                x2={p1.x + perpX * endcapH} y2={p1.y + perpY * endcapH}
+                stroke="#2196F3"
+                strokeWidth={2.5 / scale}
+                strokeLinecap="round"
+              />
+              {/* Right endcap */}
+              <line
+                x1={p2.x} y1={p2.y}
+                x2={p2.x + perpX * endcapH} y2={p2.y + perpY * endcapH}
+                stroke="#2196F3"
+                strokeWidth={2.5 / scale}
+                strokeLinecap="round"
+              />
+
+              {/* Cm label at center of the bar */}
+              {scaleRef && (
+                <text
+                  x={(p1.x + p2.x) / 2}
+                  y={(p1.y + p2.y) / 2 - 8 / scale}
+                  textAnchor="middle"
+                  fill="#2196F3"
+                  fontSize={14 / scale}
+                  fontWeight="700"
+                  fontFamily="system-ui, sans-serif"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {scaleRef.valueCm.toFixed(1)} cm
+                </text>
+              )}
+
+              {/* Draggable discs at endpoints (only when in scale tool) */}
+              {scaleDraggable && [p1, p2].map((p, i) => {
+                const isDragging = scaleDragIdx === i;
+                return (
+                  <g key={`scale-${i}`}>
+                    {isDragging && (
+                      <>
+                        <line
+                          x1={p.x} y1={p.y}
+                          x2={p.x} y2={p.y + liftOffsetImg}
+                          stroke="#2196F3"
+                          strokeWidth={1.5 / scale}
+                          opacity={0.5}
+                        />
+                        <circle
+                          cx={p.x} cy={p.y + liftOffsetImg}
+                          r={4 / scale}
+                          fill="#2196F3" opacity={0.4}
+                        />
+                      </>
+                    )}
+                    <circle
+                      cx={p.x} cy={p.y}
+                      r={12 / scale}
+                      fill={isDragging ? '#1565C0' : '#2196F3'}
+                      stroke="white"
+                      strokeWidth={2 / scale}
+                    />
+                  </g>
+                );
+              })}
+            </>
+          );
+        })()}
 
         {/* In-progress scale: single point */}
         {activeTool === 'scale' && scalePoints.length === 1 && !scaleRef && (
@@ -148,7 +183,7 @@ export function InteractionLayer({
           />
         )}
 
-        {/* Lines between shape points */}
+        {/* Lines between shape points (open polyline) */}
         {!closed && shapePoints.length >= 2 && (
           <polyline
             points={shapePoints.map(p => `${p.x},${p.y}`).join(' ')}
@@ -163,10 +198,8 @@ export function InteractionLayer({
         {/* Dashed leader line from last point to crosshair */}
         {showLeader && lastPoint && crosshairImagePos && (
           <line
-            x1={lastPoint.x}
-            y1={lastPoint.y}
-            x2={crosshairImagePos.x}
-            y2={crosshairImagePos.y}
+            x1={lastPoint.x} y1={lastPoint.y}
+            x2={crosshairImagePos.x} y2={crosshairImagePos.y}
             stroke={leaderColor}
             strokeWidth={2 / scale}
             strokeDasharray={`${6 / scale} ${6 / scale}`}
@@ -175,22 +208,20 @@ export function InteractionLayer({
           />
         )}
 
-        {/* Shape points */}
-        {shapePoints.map((p, i) => (
+        {/* Shape points: ONLY visible in edit mode */}
+        {editMode && shapePoints.map((p, i) => (
           <g key={i}>
             <circle
-              cx={p.x}
-              cy={p.y}
-              r={(editMode ? 12 : 6) / scale}
+              cx={p.x} cy={p.y}
+              r={12 / scale}
               fill={i === 0 && !closed ? '#FF9800' : '#F57C00'}
               stroke="white"
               strokeWidth={2 / scale}
-              style={{ pointerEvents: editMode ? 'auto' : 'none', cursor: editMode ? 'grab' : 'default' }}
+              style={{ pointerEvents: 'auto', cursor: 'grab' }}
             />
-            {editMode && dragIndex === i && (
+            {dragIndex === i && (
               <circle
-                cx={p.x}
-                cy={p.y}
+                cx={p.x} cy={p.y}
                 r={18 / scale}
                 fill="none"
                 stroke="#F57C00"
@@ -200,6 +231,18 @@ export function InteractionLayer({
             )}
           </g>
         ))}
+
+        {/* First point indicator when drawing (not editing, not closed) */}
+        {!editMode && !closed && shapePoints.length > 0 && activeTool === 'shape' && (
+          <circle
+            cx={shapePoints[0].x}
+            cy={shapePoints[0].y}
+            r={6 / scale}
+            fill="#FF9800"
+            stroke="white"
+            strokeWidth={2 / scale}
+          />
+        )}
       </g>
     </svg>
   );
