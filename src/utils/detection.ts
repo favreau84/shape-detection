@@ -241,7 +241,6 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
     }
 
     if (pxPerCm && pxPerCm > 10) {
-      // Choose a round cm value that fits in the ruler
       const rulerLengthCm = (longHalf * 2) / pxPerCm;
       let segmentCm = 10;
       if (rulerLengthCm < 12) segmentCm = 5;
@@ -250,11 +249,37 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
 
       const segmentPx = segmentCm * pxPerCm;
 
-      // p1 = ruler tip (leftmost), p2 = tip + N cm along the axis
+      // Second pass: snap p2 to the nearest full-height tick mark
+      // The cm mark at position N cm is a thin dark line spanning the
+      // full ruler height. Search in the profile for the highest peak
+      // near the expected position (within ±0.3 cm tolerance).
+      const tipBin = Math.floor((minAxisProj + longHalf) / BIN_SIZE);
+      const expectedBin = tipBin + Math.round(segmentPx / BIN_SIZE);
+      const searchRadius = Math.round((pxPerCm * 0.3) / BIN_SIZE); // ±0.3 cm
+      let bestBin = expectedBin;
+      let bestVal = -1;
+      for (let b = Math.max(0, expectedBin - searchRadius); b <= Math.min(numBins - 1, expectedBin + searchRadius); b++) {
+        if (heightProfile[b] > bestVal) {
+          bestVal = heightProfile[b];
+          bestBin = b;
+        }
+      }
+
+      // Convert bin back to axis projection and then to image coords
+      const snappedProj = (bestBin * BIN_SIZE) - longHalf;
+      const p2x = cx + axisX * snappedProj;
+      const p2y = cy + axisY * snappedProj;
+
+      // Recalculate the actual distance in cm based on snapped position
+      const tipProj = minAxisProj;
+      const actualPxDist = (snappedProj - tipProj);
+      const actualCm = Math.round(actualPxDist / pxPerCm);
+      const finalCm = actualCm > 0 ? actualCm : segmentCm;
+
       result = {
         p1: { x: Math.round(tipPoint.x), y: Math.round(tipPoint.y) },
-        p2: { x: Math.round(tipPoint.x + axisX * segmentPx), y: Math.round(tipPoint.y + axisY * segmentPx) },
-        distanceCm: segmentCm,
+        p2: { x: Math.round(p2x), y: Math.round(p2y) },
+        distanceCm: finalCm,
         axisX, axisY,
       };
     } else {
