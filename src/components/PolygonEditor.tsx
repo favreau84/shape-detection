@@ -172,6 +172,7 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
 
   const area = closed && shapePoints.length >= 3 ? computePolygonArea(shapePoints) : 0;
   const pxPerCm = scaleRef ? computePxPerCm(scaleRef.p1, scaleRef.p2, scaleRef.valueCm) : null;
+  const areaCm2 = (area > 0 && pxPerCm) ? area / (pxPerCm * pxPerCm) : null;
   const areaDisplay = area > 0 ? (pxPerCm ? formatAreaCm2(area, pxPerCm) : formatAreaPx(area)) : '';
 
   const getAddButtonLabel = () => {
@@ -225,6 +226,7 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detectedRu
         onScaleDragStart={(i) => setScaleDragIdx(i)}
         onScaleDragEnd={() => setScaleDragIdx(null)}
         onCrosshairPosChange={(pos) => { crosshairPosRef.current = pos; }}
+        areaCm2={areaCm2}
       />
 
       {/* Overlays on top of viewport */}

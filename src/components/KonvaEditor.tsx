@@ -21,6 +21,7 @@ interface Props {
   locked: boolean;
   scaleDragIdx: number | null;
   dragOffsetPx: number;
+  areaCm2: number | null;
   onShapePointDrag: (index: number, pt: Point) => void;
   onScalePointDrag: (index: number, pt: Point) => void;
   onScaleDragStart: (index: number) => void;
@@ -57,6 +58,7 @@ export function KonvaEditor({
   onScaleDragStart,
   onScaleDragEnd,
   onCrosshairPosChange,
+  areaCm2,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -317,13 +319,20 @@ export function KonvaEditor({
               <Circle x={scalePoints[0].x} y={scalePoints[0].y} radius={5 / currentScale} fill="#2196F3" stroke="white" strokeWidth={1.5 / currentScale} />
             )}
 
-            {closed && shapePoints.length >= 3 && (
-              <Line
-                points={shapePoints.flatMap(p => [p.x, p.y])}
-                closed fill="rgba(245, 124, 0, 0.25)" stroke="#F57C00"
-                strokeWidth={3 / currentScale} lineJoin="round"
-              />
-            )}
+            {closed && shapePoints.length >= 3 && (() => {
+              const isOver = areaCm2 !== null && areaCm2 > 20;
+              const polyColor = areaCm2 !== null ? (isOver ? '#E53935' : '#43A047') : '#F57C00';
+              const polyFill = areaCm2 !== null
+                ? (isOver ? 'rgba(229, 57, 53, 0.25)' : 'rgba(67, 160, 71, 0.25)')
+                : 'rgba(245, 124, 0, 0.25)';
+              return (
+                <Line
+                  points={shapePoints.flatMap(p => [p.x, p.y])}
+                  closed fill={polyFill} stroke={polyColor}
+                  strokeWidth={3 / currentScale} lineJoin="round"
+                />
+              );
+            })()}
 
             {!closed && shapePoints.length >= 2 && (
               <Line
