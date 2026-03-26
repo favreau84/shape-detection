@@ -59,19 +59,14 @@ export default function App() {
     }
   }, [imageSrc, detecting]);
 
-  const handleCapture = useCallback((dataUrl: string) => {
+  const handleCapture = useCallback((dataUrl: string, width: number, height: number) => {
     setImageSrc(dataUrl);
+    setImageSize({ width, height });
     setDetectedPolygon(null);
     setDetectedRuler(null);
     setDetecting(false);
     setScaleRef(null);
     setPhase('draw');
-
-    const img = new Image();
-    img.onload = () => {
-      setImageSize({ width: img.naturalWidth, height: img.naturalHeight });
-    };
-    img.src = dataUrl;
   }, []);
 
   const handleDone = useCallback((points: Point[], area: number, scale: ScaleRef | null) => {

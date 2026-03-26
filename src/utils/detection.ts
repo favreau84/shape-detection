@@ -188,7 +188,34 @@ export async function detectRuler(dataUrl: string): Promise<RulerDetection | nul
 
       const period = findPeriodByAutocorrelation(smoothed, minLagBins, maxLagBins);
       if (period) {
-        pxPerCm = period * BIN_SIZE; // Convert from bins back to pixels
+        // Check if this is half-cm marks: if 2x the period also has strong
+        // autocorrelation, we probably found half-cm marks
+        const doublePeriod = period * 2;
+        if (doublePeriod <= maxLagBins) {
+          const mean = smoothed.reduce((a, b) => a + b, 0) / smoothed.length;
+          const centered = smoothed.map(v => v - mean);
+          let variance = 0;
+          for (const v of centered) variance += v * v;
+
+          let scoreAtPeriod = 0;
+          let scoreAtDouble = 0;
+          for (let i = 0; i < centered.length - doublePeriod; i++) {
+            scoreAtPeriod += centered[i] * centered[i + period];
+            scoreAtDouble += centered[i] * centered[i + doublePeriod];
+          }
+          scoreAtPeriod /= variance;
+          scoreAtDouble /= variance;
+
+          // If the double-period has a strong signal (>60% of the single period),
+          // then single period = half-cm, double = cm
+          if (scoreAtDouble > scoreAtPeriod * 0.6) {
+            pxPerCm = doublePeriod * BIN_SIZE;
+          } else {
+            pxPerCm = period * BIN_SIZE;
+          }
+        } else {
+          pxPerCm = period * BIN_SIZE;
+        }
       }
     }
 

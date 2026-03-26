@@ -1,7 +1,9 @@
 import { useRef } from 'react';
 
+const MAX_DIM = 2000;
+
 interface Props {
-  onCapture: (imageDataUrl: string) => void;
+  onCapture: (imageDataUrl: string, width: number, height: number) => void;
 }
 
 export function CameraCapture({ onCapture }: Props) {
@@ -11,13 +13,28 @@ export function CameraCapture({ onCapture }: Props) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        onCapture(reader.result);
+
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      // Downscale to MAX_DIM for performance
+      let w = img.naturalWidth;
+      let h = img.naturalHeight;
+      if (w > MAX_DIM || h > MAX_DIM) {
+        const ratio = Math.min(MAX_DIM / w, MAX_DIM / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
       }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      onCapture(dataUrl, w, h);
     };
-    reader.readAsDataURL(file);
+    img.src = url;
   };
 
   return (
@@ -35,36 +52,14 @@ export function CameraCapture({ onCapture }: Props) {
         <p className="capture-subtitle">Prenez une photo pour mesurer la surface</p>
         <div className="capture-buttons">
           <button className="btn btn-primary" onClick={() => cameraRef.current?.click()}>
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <rect x="2" y="5" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-              <circle cx="10" cy="11" r="3.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
-            </svg>
             Prendre une photo
           </button>
           <button className="btn btn-secondary" onClick={() => galleryRef.current?.click()}>
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-              <circle cx="7" cy="7" r="2" fill="currentColor" opacity="0.6" />
-              <path d="M2 14L6 10L10 14L14 8L18 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
             Choisir une image
           </button>
         </div>
-        <input
-          ref={cameraRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleChange}
-          style={{ display: 'none' }}
-        />
-        <input
-          ref={galleryRef}
-          type="file"
-          accept="image/*"
-          onChange={handleChange}
-          style={{ display: 'none' }}
-        />
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleChange} style={{ display: 'none' }} />
+        <input ref={galleryRef} type="file" accept="image/*" onChange={handleChange} style={{ display: 'none' }} />
       </div>
     </div>
   );

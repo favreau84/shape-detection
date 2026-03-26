@@ -169,8 +169,15 @@ body {
   color: var(--text-secondary);
 }
 
-.editor-viewport {
+.editor-viewport-wrapper {
   flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.editor-viewport {
+  width: 100%;
+  height: 100%;
   position: relative;
   overflow: hidden;
   background: var(--gray-900);
@@ -183,6 +190,24 @@ body {
 }
 
 .interaction-layer { overflow: visible; }
+
+.editor-overlays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.editor-overlays > * {
+  pointer-events: auto;
+}
+
+.editor-overlays .detection-overlay {
+  pointer-events: none;
+}
 
 /* Viewport top bar (toggle + scale badge floating over image) */
 .viewport-top-bar {
