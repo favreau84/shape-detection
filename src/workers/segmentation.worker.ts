@@ -131,15 +131,10 @@ async function runSegmentation(imageData: ArrayBuffer, origWidth: number, origHe
 
   const image = new RawImage(scaledPixels, w, h, 4);
 
-  const inputs = await processor!(image);
-
-  const processedInputs = {
-    ...inputs,
-    input_points: [[[w / 2, h / 2]]],
-    input_labels: [[1]],
-  };
-
-  const outputs = await model!(processedInputs);
+  // Pass input_points and input_labels to the processor (not the model)
+  // The processor converts them to properly shaped Tensors and rescales coordinates
+  const inputs = await processor!(image, [[[w / 2, h / 2]]], [[1]]);
+  const outputs = await model!(inputs);
   const maskData = outputs.pred_masks.data as Float32Array;
   const maskShape = outputs.pred_masks.dims;
   const maskH = maskShape[maskShape.length - 2];
