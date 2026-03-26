@@ -1,4 +1,4 @@
-import { env, AutoModel, AutoProcessor, RawImage } from '@xenova/transformers';
+import { env, AutoModel, AutoProcessor, RawImage, Tensor } from '@xenova/transformers';
 
 env.allowLocalModels = false;
 
@@ -131,14 +131,16 @@ async function runSegmentation(imageData: ArrayBuffer, origWidth: number, origHe
 
   const image = new RawImage(scaledPixels, w, h, 4);
 
-  const inputPoints = [[[w / 2, h / 2]]];
-  const inputLabels = [[1]];
-
   const inputs = await processor!(image);
+
+  // Build input_points and input_labels as proper Tensors
+  const inputPointsData = new Float32Array([w / 2, h / 2]);
+  const inputLabelsData = new BigInt64Array([1n]);
+
   const processedInputs = {
     ...inputs,
-    input_points: inputPoints,
-    input_labels: inputLabels,
+    input_points: new Tensor('float32', inputPointsData, [1, 1, 2]),
+    input_labels: new Tensor('int64', inputLabelsData, [1, 1]),
   };
 
   const outputs = await model!(processedInputs);
