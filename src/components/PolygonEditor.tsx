@@ -23,7 +23,7 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
   const [shapePoints, setShapePoints] = useState<Point[]>([]);
   const [closed, setClosed] = useState(false);
   const [mode, setMode] = useState<EditorMode>('draw');
-  const [tool, setTool] = useState<DrawTool>('shape');
+  const [tool, setTool] = useState<DrawTool>('scale');
   const [scalePoints, setScalePoints] = useState<Point[]>([]);
   const [scaleRef, setScaleRef] = useState<ScaleRef | null>(null);
   const [showScaleModal, setShowScaleModal] = useState(false);
@@ -204,6 +204,17 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
     dragStartPos.current = null;
   }, []);
 
+  // Compute crosshair position in image coords for the dashed line
+  const getCrosshairImagePos = useCallback((): Point | null => {
+    const container = viewport.containerRef.current;
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    return screenToImage(
+      rect.width / 2, rect.height / 2,
+      viewport.state.offsetX, viewport.state.offsetY, viewport.state.scale
+    );
+  }, [viewport]);
+
   const closable = !closed && canClose();
   const area = closed && shapePoints.length >= 3 ? computePolygonArea(shapePoints) : 0;
   const pxPerCm = scaleRef ? computePxPerCm(scaleRef.p1, scaleRef.p2, scaleRef.valueCm) : null;
@@ -269,6 +280,7 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
             editMode={mode === 'edit'}
             dragIndex={dragIndex}
             activeTool={tool}
+            crosshairImagePos={getCrosshairImagePos()}
           />
         </MapViewport>
 
@@ -277,16 +289,16 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
           <div className="viewport-top-bar">
             <div className="tool-toggle">
               <button
-                className={`tool-toggle-btn ${tool === 'shape' ? 'active' : ''}`}
-                onClick={() => setTool('shape')}
-              >
-                Forme
-              </button>
-              <button
                 className={`tool-toggle-btn ${tool === 'scale' ? 'active' : ''}`}
                 onClick={() => setTool('scale')}
               >
                 Échelle
+              </button>
+              <button
+                className={`tool-toggle-btn ${tool === 'shape' ? 'active' : ''}`}
+                onClick={() => setTool('shape')}
+              >
+                Forme
               </button>
             </div>
 

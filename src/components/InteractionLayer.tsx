@@ -12,6 +12,7 @@ interface Props {
   editMode: boolean;
   dragIndex: number | null;
   activeTool: DrawTool;
+  crosshairImagePos: Point | null;
 }
 
 export function InteractionLayer({
@@ -26,15 +27,28 @@ export function InteractionLayer({
   editMode,
   dragIndex,
   activeTool,
+  crosshairImagePos,
 }: Props) {
   const { offsetX, offsetY, scale } = viewportState;
 
-  // Determine which scale line to show: committed scaleRef or in-progress scalePoints
-  const scaleLine = scaleRef
-    ? { p1: scaleRef.p1, p2: scaleRef.p2 }
-    : scalePoints.length === 2
-      ? { p1: scalePoints[0], p2: scalePoints[1] }
-      : null;
+  // Show scale line only when in scale tool mode
+  const showScaleLine = activeTool === 'scale';
+  const scaleLine = showScaleLine
+    ? (scaleRef
+        ? { p1: scaleRef.p1, p2: scaleRef.p2 }
+        : scalePoints.length === 2
+          ? { p1: scalePoints[0], p2: scalePoints[1] }
+          : null)
+    : null;
+
+  // Determine the last active point + whether to show dashed leader line
+  const activePoints = activeTool === 'shape' ? shapePoints : scalePoints;
+  const showLeader = !closed
+    && crosshairImagePos
+    && activePoints.length > 0
+    && !(activeTool === 'scale' && scalePoints.length >= 2);
+  const lastPoint = activePoints.length > 0 ? activePoints[activePoints.length - 1] : null;
+  const leaderColor = activeTool === 'scale' ? '#2196F3' : '#F57C00';
 
   return (
     <svg
@@ -51,7 +65,7 @@ export function InteractionLayer({
       <g transform={`translate(${offsetX}, ${offsetY}) scale(${scale})`}>
         <image href={imageSrc} width={imageWidth} height={imageHeight} />
 
-        {/* Scale reference line */}
+        {/* Scale reference line (only visible when scale tool active) */}
         {scaleLine && (
           <>
             <line
@@ -101,6 +115,21 @@ export function InteractionLayer({
             strokeWidth={3 / scale}
             strokeLinejoin="round"
             strokeLinecap="round"
+          />
+        )}
+
+        {/* Dashed leader line from last point to crosshair */}
+        {showLeader && lastPoint && crosshairImagePos && (
+          <line
+            x1={lastPoint.x}
+            y1={lastPoint.y}
+            x2={crosshairImagePos.x}
+            y2={crosshairImagePos.y}
+            stroke={leaderColor}
+            strokeWidth={2 / scale}
+            strokeDasharray={`${6 / scale} ${6 / scale}`}
+            strokeLinecap="round"
+            opacity={0.7}
           />
         )}
 
