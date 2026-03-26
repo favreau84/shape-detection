@@ -216,6 +216,41 @@ body {
   margin-left: 2px;
 }
 
+/* Magic wand button */
+.btn-magic {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(26, 26, 26, 0.8);
+  backdrop-filter: blur(8px);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-magic:hover:not(:disabled) {
+  background: rgba(245, 124, 0, 0.2);
+}
+
+.btn-magic:disabled {
+  cursor: default;
+}
+
+.btn-magic-active {
+  background: rgba(245, 124, 0, 0.15);
+}
+
+.spinner-sm {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
 /* Crosshair */
 .crosshair {
   position: absolute;

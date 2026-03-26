@@ -12,13 +12,14 @@ interface Props {
   detectedPolygon: Point[] | null;
   detecting: boolean;
   detectionStatus: string;
+  onRequestDetection: () => void;
   onDone: (points: Point[], area: number, scale: ScaleRef | null) => void;
   onBack: () => void;
 }
 
 const CLOSE_THRESHOLD_PX = 30;
 
-export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting, detectionStatus, onDone, onBack }: Props) {
+export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting, detectionStatus, onRequestDetection, onDone, onBack }: Props) {
   const [shapePoints, setShapePoints] = useState<Point[]>([]);
   const [closed, setClosed] = useState(false);
   const [mode, setMode] = useState<EditorMode>('draw');
@@ -296,6 +297,26 @@ export function PolygonEditor({ imageSrc, imageSize, detectedPolygon, detecting,
                 <span className="scale-badge-x">&times;</span>
               </div>
             )}
+
+            {/* Spacer */}
+            <div style={{ flex: 1 }} />
+
+            {/* Magic wand button */}
+            <button
+              className={`btn-magic ${detecting ? 'btn-magic-active' : ''}`}
+              onClick={onRequestDetection}
+              disabled={detecting}
+              title="Détection automatique"
+            >
+              {detecting ? (
+                <div className="spinner spinner-sm" />
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 21L12.5 11.5M12.5 11.5L15 4L17.5 11.5L24 14L17.5 16.5L15 24L12.5 16.5L6 14L12.5 11.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"/>
+                  <path d="M6 2L7 5L10 6L7 7L6 10L5 7L2 6L5 5L6 2Z" fill="currentColor" opacity="0.6"/>
+                </svg>
+              )}
+            </button>
           </div>
         )}
 
