@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1120" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1A1A1A"/>
+      <stop offset="100%" stop-color="#222222"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="800" height="1120" fill="url(#bg)" rx="20"/>
+
+  <!-- Header -->
+  <rect x="40" y="40" width="720" height="100" rx="16" fill="#252525"/>
+  <rect x="40" y="40" width="6" height="100" rx="3" fill="#43A047"/>
+  <text x="70" y="78" fill="#43A047" font-size="14" font-weight="600" letter-spacing="2">AUDIT SECURITE</text>
+  <text x="70" y="115" fill="white" font-size="28" font-weight="800">Mesure Cloque &#8212; PWA</text>
+  <rect x="580" y="60" width="150" height="50" rx="25" fill="#43A047"/>
+  <text x="655" y="91" fill="white" font-size="18" font-weight="700" text-anchor="middle">CONFORME</text>
+
+  <!-- Shield icon -->
+  <g transform="translate(690, 165)">
+    <circle r="35" fill="#43A047" opacity="0.12"/>
+    <path d="M0,-20 L-16,-12 L-16,4 C-16,14 -6,22 0,25 C6,22 16,14 16,4 L16,-12 Z" fill="none" stroke="#43A047" stroke-width="2.5"/>
+    <path d="M-6,2 L-2,6 L7,-3" stroke="#43A047" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+
+  <!-- Subtitle -->
+  <text x="40" y="185" fill="#9E9E9E" font-size="13">App : https://favreau84.github.io/shape-detection/</text>
+  <text x="40" y="205" fill="#9E9E9E" font-size="13">Stack : React 19, TypeScript, Konva.js, OpenCV.js | Hebergement : GitHub Pages (HTTPS)</text>
+
+  <!-- Section 1: Architecture -->
+  <text x="40" y="255" fill="white" font-size="18" font-weight="700">1. Architecture &#8212; Zero serveur</text>
+  <line x1="40" y1="268" x2="760" y2="268" stroke="#333" stroke-width="1"/>
+
+  <rect x="40" y="280" width="720" height="70" rx="10" fill="#252525"/>
+  <text x="60" y="306" fill="#B0B0B0" font-size="13">L'application est 100% client-side. Il n'y a aucun serveur, aucune API, aucune base</text>
+  <text x="60" y="325" fill="#B0B0B0" font-size="13">de donnees. GitHub Pages ne sert que des fichiers statiques (HTML/JS/CSS) via HTTPS.</text>
+  <text x="60" y="344" fill="#66BB6A" font-size="12" font-weight="600">&#10003; Elimine : injection SQL, RCE, SSRF, et toute vulnerabilite serveur.</text>
+
+  <!-- Section 2: Donnees -->
+  <text x="40" y="390" fill="white" font-size="18" font-weight="700">2. Donnees photos &#8212; Jamais transmises</text>
+  <line x1="40" y1="403" x2="760" y2="403" stroke="#333" stroke-width="1"/>
+
+  <rect x="40" y="415" width="350" height="90" rx="10" fill="#252525"/>
+  <text x="60" y="442" fill="#66BB6A" font-size="13" font-weight="600">&#10003; Aucun envoi reseau</text>
+  <text x="60" y="462" fill="#B0B0B0" font-size="12">Pas de fetch(), XHR, WebSocket,</text>
+  <text x="60" y="480" fill="#B0B0B0" font-size="12">sendBeacon, ni analytics.</text>
+
+  <rect x="410" y="415" width="350" height="90" rx="10" fill="#252525"/>
+  <text x="430" y="442" fill="#66BB6A" font-size="13" font-weight="600">&#10003; Aucun stockage persistant</text>
+  <text x="430" y="462" fill="#B0B0B0" font-size="12">Pas de localStorage, cookies,</text>
+  <text x="430" y="480" fill="#B0B0B0" font-size="12">IndexedDB, ni cache. Tout est en RAM.</text>
+
+  <rect x="40" y="515" width="720" height="40" rx="10" fill="#1B3A1B"/>
+  <text x="400" y="541" fill="#66BB6A" font-size="14" font-weight="700" text-anchor="middle">La photo reste dans la memoire du navigateur et disparait au rechargement de la page.</text>
+
+  <!-- Section 3: Permissions -->
+  <text x="40" y="595" fill="white" font-size="18" font-weight="700">3. Permissions demandees</text>
+  <line x1="40" y1="608" x2="760" y2="608" stroke="#333" stroke-width="1"/>
+
+  <rect x="40" y="620" width="160" height="55" rx="10" fill="#252525"/>
+  <text x="120" y="644" fill="#66BB6A" font-size="13" font-weight="600" text-anchor="middle">Camera</text>
+  <text x="120" y="662" fill="#757575" font-size="11" text-anchor="middle">via file input</text>
+
+  <rect x="220" y="620" width="160" height="55" rx="10" fill="#252525"/>
+  <text x="300" y="644" fill="#EF5350" font-size="13" font-weight="600" text-anchor="middle">Pas de GPS</text>
+  <text x="300" y="662" fill="#757575" font-size="11" text-anchor="middle">aucune geoloc</text>
+
+  <rect x="400" y="620" width="160" height="55" rx="10" fill="#252525"/>
+  <text x="480" y="644" fill="#EF5350" font-size="13" font-weight="600" text-anchor="middle">Pas de micro</text>
+  <text x="480" y="662" fill="#757575" font-size="11" text-anchor="middle">aucun enregistrement</text>
+
+  <rect x="580" y="620" width="180" height="55" rx="10" fill="#252525"/>
+  <text x="670" y="644" fill="#EF5350" font-size="13" font-weight="600" text-anchor="middle">Pas de notif push</text>
+  <text x="670" y="662" fill="#757575" font-size="11" text-anchor="middle">aucune inscription</text>
+
+  <!-- Section 4: Vulns -->
+  <text x="40" y="720" fill="white" font-size="18" font-weight="700">4. Vulnerabilites analysees</text>
+  <line x1="40" y1="733" x2="760" y2="733" stroke="#333" stroke-width="1"/>
+
+  <g transform="translate(40, 745)">
+    <rect width="230" height="40" rx="8" fill="#252525"/>
+    <circle cx="22" cy="20" r="8" fill="#43A047"/>
+    <text x="40" y="25" fill="#B0B0B0" font-size="13">XSS / Injection</text>
+    <text x="200" y="25" fill="#66BB6A" font-size="12" font-weight="700">AUCUN</text>
+
+    <rect x="245" y="0" width="230" height="40" rx="8" fill="#252525"/>
+    <circle cx="267" cy="20" r="8" fill="#43A047"/>
+    <text x="285" y="25" fill="#B0B0B0" font-size="13">Fuite de donnees</text>
+    <text x="445" y="25" fill="#66BB6A" font-size="12" font-weight="700">AUCUN</text>
+
+    <rect x="490" y="0" width="270" height="40" rx="8" fill="#252525"/>
+    <circle cx="512" cy="20" r="8" fill="#43A047"/>
+    <text x="530" y="25" fill="#B0B0B0" font-size="13">Tracking / Analytics</text>
+    <text x="720" y="25" fill="#66BB6A" font-size="12" font-weight="700">AUCUN</text>
+  </g>
+
+  <!-- Section 5: Dep externe -->
+  <text x="40" y="835" fill="white" font-size="18" font-weight="700">5. Dependance externe</text>
+  <line x1="40" y1="848" x2="760" y2="848" stroke="#333" stroke-width="1"/>
+
+  <rect x="40" y="860" width="720" height="65" rx="10" fill="#252525"/>
+  <rect x="40" y="860" width="6" height="65" rx="3" fill="#FF9800"/>
+  <text x="65" y="885" fill="#FF9800" font-size="13" font-weight="600">OpenCV.js 4.10 charge depuis docs.opencv.org (CDN officiel, HTTPS)</text>
+  <text x="65" y="908" fill="#757575" font-size="12">Recommandation : ajouter un hash SRI ou heberger le fichier localement pour eliminer le risque supply-chain.</text>
+
+  <!-- Section 6: Reco -->
+  <text x="40" y="970" fill="white" font-size="18" font-weight="700">6. Recommandations optionnelles</text>
+  <line x1="40" y1="983" x2="760" y2="983" stroke="#333" stroke-width="1"/>
+
+  <rect x="40" y="995" width="720" height="85" rx="10" fill="#252525"/>
+  <circle cx="68" cy="1015" r="10" fill="#FF9800" opacity="0.2"/>
+  <text x="68" y="1020" fill="#FF9800" font-size="12" font-weight="700" text-anchor="middle">1</text>
+  <text x="88" y="1020" fill="#B0B0B0" font-size="13">Ajouter un hash SRI sur le script OpenCV.js</text>
+
+  <circle cx="68" cy="1042" r="10" fill="#FF9800" opacity="0.2"/>
+  <text x="68" y="1047" fill="#FF9800" font-size="12" font-weight="700" text-anchor="middle">2</text>
+  <text x="88" y="1047" fill="#B0B0B0" font-size="13">Ajouter une Content-Security-Policy avec connect-src 'none' (garantie formelle zero reseau)</text>
+
+  <circle cx="68" cy="1069" r="10" fill="#FF9800" opacity="0.2"/>
+  <text x="68" y="1074" fill="#FF9800" font-size="12" font-weight="700" text-anchor="middle">3</text>
+  <text x="88" y="1074" fill="#B0B0B0" font-size="13">Activer la protection de branche sur main (empeche les push non autorises)</text>
+
+  <!-- Footer -->
+  <rect x="40" y="1095" width="720" height="2" rx="1" fill="#333"/>
+  <text x="400" y="1115" fill="#616161" font-size="11" text-anchor="middle">Audit realise le 2 avril 2026 &#8212; Session Claude Code &#8212; Aucune donnee utilisateur ne quitte le terminal.</text>
+</svg>
